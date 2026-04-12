@@ -4,12 +4,12 @@ from app.core.config import settings
 
 
 class DataNewtonClient:
-    def __init__(self):
-        self.base_url = settings.datanewton_base_url
-        self.api_key = settings.datanewton_api_key
+    # DataNewton имеет два разных хоста для разных endpoints
+    SEARCH_BASE = "https://datanewton.ru/api/v1"   # counterparty search (X-Api-Key header)
+    FINANCE_BASE = "https://api.datanewton.ru/v1"   # finance (key query param)
 
-    def _headers(self) -> dict:
-        return {"X-Api-Key": self.api_key} if self.api_key else {}
+    def __init__(self):
+        self.api_key = settings.datanewton_api_key
 
     async def search_counterparty(self, query: str, limit: int = 10) -> list[dict]:
         """Поиск компании по названию или ИНН."""
@@ -17,8 +17,9 @@ class DataNewtonClient:
             return []
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
-                f"{self.base_url}/counterparty",
-                params={"query": query, "limit": limit, "offset": 0, "key": self.api_key},
+                f"{self.SEARCH_BASE}/counterparty",
+                params={"query": query, "limit": limit, "offset": 0},
+                headers={"X-Api-Key": self.api_key},
             )
             r.raise_for_status()
             data = r.json()
@@ -30,7 +31,7 @@ class DataNewtonClient:
             return None
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
-                f"{self.base_url}/finance",
+                f"{self.FINANCE_BASE}/finance",
                 params={"ogrn": ogrn, "key": self.api_key},
             )
             r.raise_for_status()
