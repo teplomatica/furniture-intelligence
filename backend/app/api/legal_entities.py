@@ -187,6 +187,14 @@ async def discover_for_company(
             best = dn_results[0]
 
         parsed = datanewton.parse_counterparty(best)
+
+        # Повторная проверка перед вставкой (защита от race condition)
+        dup_check = await db.execute(
+            select(LegalEntity).where(LegalEntity.company_id == company_id)
+        )
+        if dup_check.scalars().first():
+            return {"status": "skipped", "message": "Юрлицо уже добавлено (параллельный запрос)"}
+
         le = LegalEntity(
             company_id=company.id,
             inn=parsed["inn"],
