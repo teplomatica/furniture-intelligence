@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { LegalEntityForm } from "@/components/LegalEntityForm";
+import { Spinner } from "@/components/Spinner";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Company {
   id: number;
@@ -29,12 +32,68 @@ interface DiscoverResult {
   details: Array<{ company: string; status: string; legal_name?: string; inn?: string; error?: string; method?: string }>;
 }
 
+interface DiscoverStep {
+  step: string;
+  message: string;
+  [key: string]: unknown;
+}
+
 const SEGMENT_LABELS: Record<string, string> = {
   federal: "А: Федеральные сети",
   online: "Б: Онлайн-ритейлеры",
   premium: "В: Премиум",
   marketplace: "Г: Маркетплейсы",
 };
+
+const STEP_ICONS: Record<string, string> = {
+  scraping: "🔍",
+  scraped: "📄",
+  searching: "🔎",
+  saving: "💾",
+  done: "✅",
+  not_found: "❌",
+  skipped: "⏭",
+  error: "⚠️",
+};
+
+async function discoverWithSSE(
+  companyId: number,
+  onStep: (step: DiscoverStep) => void,
+): Promise<void> {
+  const token = localStorage.getItem("fi_token");
+  const res = await fetch(`${API_URL}/legal-entities/discover/${companyId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: "{}",
+  });
+
+  const reader = res.body?.getReader();
+  if (!reader) return;
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          onStep(data);
+        } catch { }
+      }
+    }
+  }
+}
 
 export default function LegalEntitiesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -44,6 +103,7 @@ export default function LegalEntitiesPage() {
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
   const [discoveringCompany, setDiscoveringCompany] = useState<number | null>(null);
+  const [discoverSteps, setDiscoverSteps] = useState<Record<number, DiscoverStep[]>>({});
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -56,6 +116,21 @@ export default function LegalEntitiesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const handleDiscover = async (companyId: number) => {
+    setDiscoveringCompany(companyId);
+    setDiscoverSteps(prev => ({ ...prev, [companyId]: [] }));
+
+    await discoverWithSSE(companyId, (step) => {
+      setDiscoverSteps(prev => ({
+        ...prev,
+        [companyId]: [...(prev[companyId] || []), step],
+      }));
+    });
+
+    loadData();
+    setDiscoveringCompany(null);
+  };
+
   const entitiesByCompany = entities.reduce<Record<number, LegalEntity[]>>((acc, le) => {
     (acc[le.company_id] ||= []).push(le);
     return acc;
@@ -66,7 +141,13 @@ export default function LegalEntitiesPage() {
     return acc;
   }, {});
 
-  if (loading) return <div className="text-gray-400">Загрузка...</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-gray-400">
+        <Spinner /> Загрузка данных...
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -85,9 +166,10 @@ export default function LegalEntitiesPage() {
               setDiscovering(false);
             }}
             disabled={discovering}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
           >
-            {discovering ? "Поиск..." : "Автопоиск DataNewton"}
+            {discovering && <Spinner className="text-white" />}
+            {discovering ? "Поиск..." : "Автопоиск всех"}
           </button>
           <button
             onClick={() => setFormOpen(true)}
@@ -130,6 +212,10 @@ export default function LegalEntitiesPage() {
             <div className="space-y-2">
               {groupCompanies.map((company) => {
                 const les = entitiesByCompany[company.id] || [];
+                const steps = discoverSteps[company.id] || [];
+                const isDiscovering = discoveringCompany === company.id;
+                const lastStep = steps[steps.length - 1];
+
                 return (
                   <div key={company.id} className="bg-white rounded-lg border">
                     <div className="px-4 py-3 flex items-center justify-between">
@@ -141,24 +227,51 @@ export default function LegalEntitiesPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={async () => {
-                            setDiscoveringCompany(company.id);
-                            try {
-                              await api.post(`/legal-entities/discover/${company.id}`, {});
-                              loadData();
-                            } catch { }
-                            setDiscoveringCompany(null);
-                          }}
-                          disabled={discoveringCompany === company.id}
-                          className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded hover:bg-green-50 hover:text-green-600 disabled:opacity-50"
+                          onClick={() => handleDiscover(company.id)}
+                          disabled={isDiscovering}
+                          className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded hover:bg-green-50 hover:text-green-600 disabled:opacity-50 flex items-center gap-1"
                         >
-                          {discoveringCompany === company.id ? "..." : "Найти ЮЛ"}
+                          {isDiscovering && <Spinner className="text-green-500" />}
+                          {isDiscovering ? "Поиск..." : "Найти ЮЛ"}
                         </button>
                         <span className="text-xs text-gray-400">
                           {les.length === 0 ? "нет юрлиц" : `${les.length} юрлиц`}
                         </span>
                       </div>
                     </div>
+
+                    {/* Пошаговый статус поиска */}
+                    {steps.length > 0 && (
+                      <div className="border-t px-4 py-2 bg-gray-50">
+                        <div className="space-y-1">
+                          {steps.map((s, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              <span>{STEP_ICONS[s.step] || "·"}</span>
+                              <span className={
+                                s.step === "done" ? "text-green-600 font-medium" :
+                                s.step === "error" ? "text-red-500" :
+                                s.step === "not_found" ? "text-orange-500" :
+                                "text-gray-500"
+                              }>
+                                {s.message}
+                              </span>
+                              {isDiscovering && i === steps.length - 1 && !["done", "error", "not_found", "skipped"].includes(s.step) && (
+                                <Spinner className="text-gray-400" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {!isDiscovering && lastStep && (
+                          <button
+                            onClick={() => setDiscoverSteps(prev => { const n = { ...prev }; delete n[company.id]; return n; })}
+                            className="mt-1 text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            Скрыть
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {les.length > 0 && (
                       <div className="border-t">
                         {les.map((le) => (
