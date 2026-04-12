@@ -102,6 +102,7 @@ export default function LegalEntitiesPage() {
                 <th className="text-left px-4 py-2">Регион</th>
                 <th className="text-left px-4 py-2">Год основания</th>
                 <th className="text-left px-4 py-2">Руководитель</th>
+                <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +117,19 @@ export default function LegalEntitiesPage() {
                   <td className="px-4 py-2">{le.region || "—"}</td>
                   <td className="px-4 py-2">{le.founded_year || "—"}</td>
                   <td className="px-4 py-2">{le.manager_name || "—"}</td>
+                  <td className="px-2 py-2">
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Удалить ${le.legal_name}?`)) {
+                          await api.delete(`/legal-entities/${le.id}`);
+                          loadEntities();
+                        }
+                      }}
+                      className="text-gray-300 hover:text-red-500 text-sm"
+                    >
+                      &times;
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

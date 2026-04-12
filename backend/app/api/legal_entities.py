@@ -13,6 +13,7 @@ from app.models.company import Company
 from app.models.legal_entity import LegalEntity
 from app.models.competitor_data import CompetitorFinancial, DataSource
 from app.services.datanewton import datanewton
+from app.services.legal_scraper import scrape_legal_info
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,15 @@ async def list_legal_entities(
         q = q.where(LegalEntity.company_id == company_id)
     result = await db.execute(q)
     return result.scalars().all()
+
+
+@router.delete("/{le_id}", status_code=204)
+async def delete_legal_entity(le_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
+    le = await db.get(LegalEntity, le_id)
+    if not le:
+        raise HTTPException(status_code=404, detail="Legal entity not found")
+    await db.delete(le)
+    await db.commit()
 
 
 @router.post("", response_model=LegalEntityOut, status_code=201)
@@ -138,8 +148,7 @@ async def auto_discover_legal_entities(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_editor),
 ):
-    """Автопоиск юрлиц через DataNewton для всех конкурентов без привязанных ЮЛ."""
-    # Компании у которых ещё нет юрлиц
+    """Автопоиск юрлиц: парсим сайты конкурентов → ищем ИНН/ОГРН → подтягиваем из DataNewton."""
     result = await db.execute(
         select(Company)
         .outerjoin(LegalEntity)
@@ -157,20 +166,43 @@ async def auto_discover_legal_entities(
 
     for company in companies_without_le:
         try:
-            results = await datanewton.search_counterparty(company.name, limit=3)
-            if not results:
+            detail = {"company": company.name, "website": company.website}
+
+            # Шаг 1: парсим сайт конкурента в поисках ИНН/ОГРН
+            scraped = await scrape_legal_info(company.website)
+            detail["scraped_inn"] = scraped.inn
+            detail["scraped_ogrn"] = scraped.ogrn
+            detail["scraped_names"] = scraped.legal_names
+
+            # Шаг 2: ищем в DataNewton по ИНН (приоритет) или ОГРН или названию с сайта
+            search_query = scraped.inn or scraped.ogrn
+            if not search_query and scraped.legal_names:
+                search_query = scraped.legal_names[0]
+            if not search_query:
+                search_query = company.name
+
+            dn_results = await datanewton.search_counterparty(search_query, limit=3)
+
+            if not dn_results:
                 skipped += 1
-                details.append({"company": company.name, "status": "not_found"})
+                detail["status"] = "not_found"
+                details.append(detail)
                 continue
 
-            # Берём первый активный результат
+            # Если у нас есть ИНН с сайта — ищем точное совпадение
             best = None
-            for r in results:
-                if r.get("active", False):
-                    best = r
-                    break
+            if scraped.inn:
+                for r in dn_results:
+                    if r.get("inn") == scraped.inn and r.get("active", False):
+                        best = r
+                        break
             if not best:
-                best = results[0]
+                for r in dn_results:
+                    if r.get("active", False):
+                        best = r
+                        break
+            if not best:
+                best = dn_results[0]
 
             parsed = datanewton.parse_counterparty(best)
             le = LegalEntity(
@@ -190,13 +222,16 @@ async def auto_discover_legal_entities(
             )
             db.add(le)
             discovered += 1
-            details.append({"company": company.name, "status": "found", "legal_name": parsed["legal_name"], "inn": parsed["inn"]})
+            detail["status"] = "found"
+            detail["legal_name"] = parsed["legal_name"]
+            detail["inn"] = parsed["inn"]
+            detail["method"] = "inn_from_site" if scraped.inn else "name_search"
+            details.append(detail)
 
-            # Пауза между запросами (rate limit 200/мин)
             await asyncio.sleep(0.5)
 
         except Exception as e:
-            logger.error(f"DataNewton error for {company.name}: {e}")
+            logger.error(f"Auto-discover error for {company.name}: {e}")
             skipped += 1
             details.append({"company": company.name, "status": "error", "error": str(e)})
 
