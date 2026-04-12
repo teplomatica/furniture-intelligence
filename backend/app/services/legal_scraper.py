@@ -55,7 +55,7 @@ OGRN_PATTERN = re.compile(r"(?:ОГРН|OGRN)[:\s]*(\d{13,15})", re.IGNORECASE)
 INN_FALLBACK = re.compile(r"(\d{10})\b")
 # Legal entity name patterns
 LEGAL_NAME_PATTERN = re.compile(
-    r"((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«\""]([^»\""]{3,60})[»\""])",
+    r'((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«"\u201c]([^»"\u201d]{3,60})[»"\u201d])',
     re.IGNORECASE,
 )
 
