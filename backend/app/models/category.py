@@ -5,7 +5,7 @@ from app.core.database import Base
 
 
 class Category(Base):
-    __tablename__ = "categories"
+    __tablename__ = "fi_categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
@@ -21,7 +21,7 @@ class Category(Base):
 
 
 class PriceSegment(Base):
-    __tablename__ = "price_segments"
+    __tablename__ = "fi_price_segments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     category_id: Mapped[int] = mapped_column(Integer, ForeignKey("categories.id"), nullable=False)
@@ -30,4 +30,4 @@ class PriceSegment(Base):
     price_max: Mapped[int | None] = mapped_column(Integer, nullable=True)   # руб (None = без ограничения)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    category: Mapped["Category"] = relationship("Category", back_populates="price_segments")
+    category: Mapped["Category"] = relationship("Category", back_populates="fi_price_segments")

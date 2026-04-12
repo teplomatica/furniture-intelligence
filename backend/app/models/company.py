@@ -19,7 +19,7 @@ class Positioning(str, PyEnum):
 
 
 class Company(Base):
-    __tablename__ = "companies"
+    __tablename__ = "fi_companies"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

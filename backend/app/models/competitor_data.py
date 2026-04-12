@@ -12,10 +12,10 @@ class DataSource(str, PyEnum):
 
 
 class CompetitorFinancial(Base):
-    __tablename__ = "competitor_financials"
+    __tablename__ = "fi_competitor_financials"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    legal_entity_id: Mapped[int] = mapped_column(Integer, ForeignKey("legal_entities.id"), nullable=False)
+    legal_entity_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_legal_entities.id"), nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
 
     revenue: Mapped[float | None] = mapped_column(Numeric(20, 2), nullable=True)        # тыс. руб.
@@ -41,22 +41,22 @@ class ChannelType(str, PyEnum):
 
 
 class CompetitorChannel(Base):
-    __tablename__ = "competitor_channels"
+    __tablename__ = "fi_competitor_channels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
     channel_type: Mapped[ChannelType] = mapped_column(Enum(ChannelType), nullable=False)
-    data: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # гибкая структура
+    data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     source: Mapped[DataSource] = mapped_column(Enum(DataSource), default=DataSource.manual)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class CompetitorTraffic(Base):
-    __tablename__ = "competitor_traffic"
+    __tablename__ = "fi_competitor_traffic"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("companies.id"), nullable=False)
-    period: Mapped[str] = mapped_column(String(7), nullable=False)  # YYYY-MM
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)
 
     monthly_visits: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bounce_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
@@ -68,12 +68,12 @@ class CompetitorTraffic(Base):
 
 
 class CompetitorAssortment(Base):
-    __tablename__ = "competitor_assortment"
+    __tablename__ = "fi_competitor_assortment"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("companies.id"), nullable=False)
-    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("categories.id"), nullable=False)
-    price_segment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("price_segments.id"), nullable=True)
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_categories.id"), nullable=False)
+    price_segment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_price_segments.id"), nullable=True)
 
     sku_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     availability_pct: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
@@ -94,11 +94,11 @@ class JobStatus(str, PyEnum):
 
 
 class CollectionJob(Base):
-    __tablename__ = "collection_jobs"
+    __tablename__ = "fi_collection_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_type: Mapped[str] = mapped_column(String(50), nullable=False)  # datanewton_finance, scrape_assortment
-    company_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("companies.id"), nullable=True)
+    job_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    company_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=True)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.pending)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

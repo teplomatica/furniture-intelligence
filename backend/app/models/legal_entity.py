@@ -5,10 +5,10 @@ from app.core.database import Base
 
 
 class LegalEntity(Base):
-    __tablename__ = "legal_entities"
+    __tablename__ = "fi_legal_entities"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
 
     # Реквизиты
     inn: Mapped[str | None] = mapped_column(String(12), nullable=True, index=True)
