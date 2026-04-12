@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
 from app.core.database import get_db
@@ -49,7 +50,9 @@ class PriceSegmentCreate(BaseModel):
 @router.get("", response_model=list[CategoryOut])
 async def list_categories(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     result = await db.execute(
-        select(Category).order_by(Category.level, Category.sort_order, Category.name)
+        select(Category)
+        .options(selectinload(Category.price_segments))
+        .order_by(Category.level, Category.sort_order, Category.name)
     )
     return result.scalars().all()
 
