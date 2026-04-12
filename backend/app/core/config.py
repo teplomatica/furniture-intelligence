@@ -20,11 +20,19 @@ class Settings(BaseSettings):
     def fix_db_url(cls, v: str) -> str:
         if not isinstance(v, str):
             return v
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
         if v.startswith("postgresql://"):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # asyncpg не понимает sslmode — заменяем на ssl=require
-        v = v.replace("?sslmode=require", "?ssl=require")
-        v = v.replace("&sslmode=require", "&ssl=require")
+        # asyncpg понимает только ssl — убираем все лишние параметры
+        parsed = urlparse(v)
+        params = parse_qs(parsed.query)
+        clean = {}
+        if "sslmode" in params:
+            clean["ssl"] = params["sslmode"][0]
+        elif "ssl" in params:
+            clean["ssl"] = params["ssl"][0]
+        new_query = urlencode(clean) if clean else ""
+        v = urlunparse(parsed._replace(query=new_query))
         return v
 
 
