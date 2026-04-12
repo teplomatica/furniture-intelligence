@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
 const SEGMENT_LABELS: Record<string, string> = {
   federal: "А: Федеральные сети",
@@ -30,12 +31,7 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const token = localStorage.getItem("token");
-    fetch(`${apiUrl}/companies`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => r.json())
+    api.get<Company[]>("/companies")
       .then(setCompanies)
       .finally(() => setLoading(false));
   }, []);
