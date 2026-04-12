@@ -1,11 +1,16 @@
-"""Парсинг ИНН/ОГРН с сайтов конкурентов через Firecrawl."""
+"""Парсинг ИНН/ОГРН с сайтов конкурентов через Firecrawl с кешированием."""
 import re
 import logging
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+CACHE_TTL_DAYS = 7
 
 # Страницы с юридической информацией (приоритет: документы → контакты → главная)
 LEGAL_PATHS = [
@@ -31,11 +36,8 @@ LEGAL_PATHS = [
     "/",
 ]
 
-# ИНН: 10 цифр (юрлицо) или 12 цифр (ИП)
 INN_PATTERN = re.compile(r"(?:ИНН|INN)\s*:?\s*(\d{10,12})")
-# ОГРН: 13 цифр (юрлицо) или 15 цифр (ИП)
 OGRN_PATTERN = re.compile(r"(?:ОГРН|OGRN)\s*:?\s*(\d{13,15})")
-# Юридическое название
 LEGAL_NAME_PATTERN = re.compile(
     r'((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«"\u00ab\u201c]([^»"\u00bb\u201d]{3,60})[»"\u00bb\u201d])',
     re.IGNORECASE,
@@ -48,11 +50,12 @@ class ScrapedLegalInfo:
     ogrn: str | None = None
     legal_names: list[str] = field(default_factory=list)
     source_url: str | None = None
-    method: str | None = None  # firecrawl / http
+    method: str | None = None  # firecrawl / http / cache
+    api_calls: int = 0         # сколько Firecrawl API вызовов потрачено
+    cache_hits: int = 0        # сколько страниц взято из кеша
 
 
 def _extract_from_text(text: str, result: ScrapedLegalInfo) -> None:
-    """Извлечь ИНН, ОГРН и юр. названия из текста."""
     if not result.inn:
         m = INN_PATTERN.search(text)
         if m:
@@ -72,8 +75,31 @@ def _extract_from_text(text: str, result: ScrapedLegalInfo) -> None:
                 break
 
 
+async def _get_cached(db: AsyncSession, url: str) -> str | None:
+    from app.models.scrape_cache import ScrapeCache
+    result = await db.execute(
+        select(ScrapeCache).where(
+            ScrapeCache.url == url,
+            ScrapeCache.scraped_at > datetime.utcnow() - timedelta(days=CACHE_TTL_DAYS),
+        )
+    )
+    cached = result.scalar_one_or_none()
+    return cached.content if cached else None
+
+
+async def _save_cache(db: AsyncSession, url: str, content: str) -> None:
+    from app.models.scrape_cache import ScrapeCache
+    result = await db.execute(select(ScrapeCache).where(ScrapeCache.url == url))
+    existing = result.scalar_one_or_none()
+    if existing:
+        existing.content = content
+        existing.scraped_at = datetime.utcnow()
+    else:
+        db.add(ScrapeCache(url=url, content=content))
+    await db.flush()
+
+
 async def _scrape_with_firecrawl(url: str) -> str | None:
-    """Получить markdown-контент страницы через Firecrawl API."""
     if not settings.firecrawl_api_key:
         return None
     try:
@@ -94,7 +120,6 @@ async def _scrape_with_firecrawl(url: str) -> str | None:
 
 
 async def _scrape_with_http(url: str) -> str | None:
-    """Фоллбэк — обычный HTTP запрос."""
     try:
         async with httpx.AsyncClient(
             timeout=10,
@@ -109,8 +134,8 @@ async def _scrape_with_http(url: str) -> str | None:
     return None
 
 
-async def scrape_legal_info(website: str) -> ScrapedLegalInfo:
-    """Парсит сайт конкурента в поисках ИНН, ОГРН, юр. названия."""
+async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> ScrapedLegalInfo:
+    """Парсит сайт конкурента в поисках ИНН, ОГРН, юр. названия. Кеширует результат."""
     if not website:
         return ScrapedLegalInfo()
 
@@ -121,17 +146,32 @@ async def scrape_legal_info(website: str) -> ScrapedLegalInfo:
     for path in LEGAL_PATHS:
         url = f"{base_url}{path}"
 
-        # Пробуем Firecrawl (рендерит JS), потом HTTP фоллбэк
+        # 1. Проверяем кеш
         text = None
-        if use_firecrawl:
+        if db:
+            text = await _get_cached(db, url)
+            if text:
+                result.cache_hits += 1
+                if not result.method:
+                    result.method = "cache"
+
+        # 2. Firecrawl (рендерит JS)
+        if not text and use_firecrawl:
             text = await _scrape_with_firecrawl(url)
             if text:
+                result.api_calls += 1
                 result.method = "firecrawl"
+                if db:
+                    await _save_cache(db, url, text)
 
+        # 3. HTTP фоллбэк
         if not text:
             text = await _scrape_with_http(url)
-            if text and not result.method:
-                result.method = "http"
+            if text:
+                if not result.method:
+                    result.method = "http"
+                if db:
+                    await _save_cache(db, url, text)
 
         if not text:
             continue
@@ -141,7 +181,6 @@ async def scrape_legal_info(website: str) -> ScrapedLegalInfo:
         if not result.source_url:
             result.source_url = url
 
-        # Нашли ИНН или ОГРН — достаточно
         if result.inn or result.ogrn:
             break
 

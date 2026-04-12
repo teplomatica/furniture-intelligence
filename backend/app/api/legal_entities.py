@@ -155,7 +155,7 @@ async def discover_for_company(
         return {"status": "skipped", "message": "Юрлица уже есть. Удалите старые перед повторным поиском."}
 
     try:
-        scraped = await scrape_legal_info(company.website)
+        scraped = await scrape_legal_info(company.website, db)
         search_query = scraped.inn or scraped.ogrn
         if not search_query and scraped.legal_names:
             search_query = scraped.legal_names[0]
@@ -218,6 +218,9 @@ async def discover_for_company(
             "legal_name": parsed["legal_name"],
             "inn": parsed["inn"],
             "method": "inn_from_site" if scraped.inn else "name_search",
+            "scrape_method": scraped.method,
+            "api_calls": scraped.api_calls,
+            "cache_hits": scraped.cache_hits,
             "scraped_inn": scraped.inn,
             "scraped_names": scraped.legal_names,
             "source_url": scraped.source_url,
@@ -261,7 +264,7 @@ async def auto_discover_legal_entities(
             detail = {"company": company.name, "website": company.website}
 
             # Шаг 1: парсим сайт конкурента в поисках ИНН/ОГРН
-            scraped = await scrape_legal_info(company.website)
+            scraped = await scrape_legal_info(company.website, db)
             detail["scraped_inn"] = scraped.inn
             detail["scraped_ogrn"] = scraped.ogrn
             detail["scraped_names"] = scraped.legal_names

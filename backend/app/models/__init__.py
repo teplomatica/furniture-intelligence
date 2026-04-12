@@ -6,6 +6,7 @@ from app.models.competitor_data import (
     CompetitorFinancial, CompetitorChannel, CompetitorTraffic,
     CompetitorAssortment, CollectionJob, DataSource, ChannelType, JobStatus
 )
+from app.models.scrape_cache import ScrapeCache
 
 __all__ = [
     "User", "UserRole", "UserStatus",
