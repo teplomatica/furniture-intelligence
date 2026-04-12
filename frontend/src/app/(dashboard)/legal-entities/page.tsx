@@ -175,7 +175,7 @@ export default function LegalEntitiesPage() {
                               onClick={async () => {
                                 if (confirm(`Удалить ${le.legal_name}?`)) {
                                   await api.delete(`/legal-entities/${le.id}`);
-                                  loadData();
+                                  setEntities(prev => prev.filter(e => e.id !== le.id));
                                 }
                               }}
                               className="text-gray-300 hover:text-red-500"
