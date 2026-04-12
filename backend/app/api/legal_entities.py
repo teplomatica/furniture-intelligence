@@ -147,6 +147,13 @@ async def discover_for_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Проверяем что у компании ещё нет юрлиц
+    existing = await db.execute(
+        select(LegalEntity).where(LegalEntity.company_id == company_id)
+    )
+    if existing.scalars().first():
+        return {"status": "skipped", "message": "Юрлица уже есть. Удалите старые перед повторным поиском."}
+
     try:
         scraped = await scrape_legal_info(company.website)
         search_query = scraped.inn or scraped.ogrn

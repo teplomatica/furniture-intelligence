@@ -1,61 +1,43 @@
-"""Парсинг ИНН/ОГРН с сайтов конкурентов."""
+"""Парсинг ИНН/ОГРН с сайтов конкурентов через Firecrawl."""
 import re
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import httpx
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Страницы где обычно указаны юридические данные
-# Приоритет: юр. документы (оферта, политика) → контакты → о компании → главная
+# Страницы с юридической информацией (приоритет: документы → контакты → главная)
 LEGAL_PATHS = [
-    # Юридические документы — самый надёжный источник ИНН/ОГРН
     "/oferta",
-    "/oferta/",
     "/public-offer",
-    "/public-offer/",
     "/offer",
-    "/politika-konfidencialnosti",
     "/privacy",
     "/privacy-policy",
-    "/privacy/",
-    "/confidential",
+    "/politika-konfidencialnosti",
+    "/legal",
+    "/pravovaya-informaciya",
+    "/terms",
+    "/user-agreement",
     "/soglashenie",
     "/agreement",
-    "/terms",
-    "/terms-of-use",
-    "/user-agreement",
-    "/legal",
-    "/legal/",
-    "/pravovaya-informaciya",
+    "/contacts",
+    "/kontakty",
+    "/about",
+    "/o-kompanii",
+    "/company",
     "/info/legal",
     "/info/oferta",
-    # Контакты
-    "/contacts",
-    "/contacts/",
-    "/kontakty",
-    "/kontakty/",
-    "/contact",
-    # О компании
-    "/about",
-    "/about/",
-    "/o-kompanii",
-    "/o-kompanii/",
-    "/company",
-    "/company/",
-    # Главная (футер)
     "/",
 ]
 
 # ИНН: 10 цифр (юрлицо) или 12 цифр (ИП)
-INN_PATTERN = re.compile(r"(?:ИНН|INN)[:\s]*(\d{10,12})", re.IGNORECASE)
+INN_PATTERN = re.compile(r"(?:ИНН|INN)\s*:?\s*(\d{10,12})")
 # ОГРН: 13 цифр (юрлицо) или 15 цифр (ИП)
-OGRN_PATTERN = re.compile(r"(?:ОГРН|OGRN)[:\s]*(\d{13,15})", re.IGNORECASE)
-# Standalone INN (fallback) — 10-digit number near legal keywords
-INN_FALLBACK = re.compile(r"(\d{10})\b")
-# Legal entity name patterns
+OGRN_PATTERN = re.compile(r"(?:ОГРН|OGRN)\s*:?\s*(\d{13,15})")
+# Юридическое название
 LEGAL_NAME_PATTERN = re.compile(
-    r'((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«"\u201c]([^»"\u201d]{3,60})[»"\u201d])',
+    r'((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«"\u00ab\u201c]([^»"\u00bb\u201d]{3,60})[»"\u00bb\u201d])',
     re.IGNORECASE,
 )
 
@@ -64,8 +46,67 @@ LEGAL_NAME_PATTERN = re.compile(
 class ScrapedLegalInfo:
     inn: str | None = None
     ogrn: str | None = None
-    legal_names: list[str] | None = None
+    legal_names: list[str] = field(default_factory=list)
     source_url: str | None = None
+    method: str | None = None  # firecrawl / http
+
+
+def _extract_from_text(text: str, result: ScrapedLegalInfo) -> None:
+    """Извлечь ИНН, ОГРН и юр. названия из текста."""
+    if not result.inn:
+        m = INN_PATTERN.search(text)
+        if m:
+            result.inn = m.group(1)
+
+    if not result.ogrn:
+        m = OGRN_PATTERN.search(text)
+        if m:
+            result.ogrn = m.group(1)
+
+    for match in LEGAL_NAME_PATTERN.finditer(text):
+        name = match.group(0).strip()
+        name = name.replace("\u00ab", '"').replace("\u00bb", '"').replace("\u201c", '"').replace("\u201d", '"')
+        if name not in result.legal_names:
+            result.legal_names.append(name)
+            if len(result.legal_names) >= 5:
+                break
+
+
+async def _scrape_with_firecrawl(url: str) -> str | None:
+    """Получить markdown-контент страницы через Firecrawl API."""
+    if not settings.firecrawl_api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                "https://api.firecrawl.dev/v1/scrape",
+                headers={"Authorization": f"Bearer {settings.firecrawl_api_key}"},
+                json={"url": url, "formats": ["markdown"]},
+            )
+            if r.status_code != 200:
+                logger.debug(f"Firecrawl {r.status_code} for {url}")
+                return None
+            data = r.json()
+            return data.get("data", {}).get("markdown", "")
+    except Exception as e:
+        logger.debug(f"Firecrawl error for {url}: {e}")
+        return None
+
+
+async def _scrape_with_http(url: str) -> str | None:
+    """Фоллбэк — обычный HTTP запрос."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=10,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        ) as client:
+            r = await client.get(url)
+            if r.status_code == 200 and len(r.text) > 500:
+                return r.text
+    except Exception as e:
+        logger.debug(f"HTTP error for {url}: {e}")
+    return None
 
 
 async def scrape_legal_info(website: str) -> ScrapedLegalInfo:
@@ -75,53 +116,33 @@ async def scrape_legal_info(website: str) -> ScrapedLegalInfo:
 
     base_url = f"https://{website.rstrip('/')}"
     result = ScrapedLegalInfo()
-    all_text = ""
+    use_firecrawl = bool(settings.firecrawl_api_key)
 
-    async with httpx.AsyncClient(
-        timeout=10,
-        follow_redirects=True,
-        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    ) as client:
-        for path in LEGAL_PATHS:
-            url = f"{base_url}{path}"
-            try:
-                r = await client.get(url)
-                if r.status_code != 200:
-                    continue
+    for path in LEGAL_PATHS:
+        url = f"{base_url}{path}"
 
-                page_text = r.text
-                all_text += " " + page_text
+        # Пробуем Firecrawl (рендерит JS), потом HTTP фоллбэк
+        text = None
+        if use_firecrawl:
+            text = await _scrape_with_firecrawl(url)
+            if text:
+                result.method = "firecrawl"
 
-                # Ищем ИНН на каждой странице — если нашли, запоминаем источник
-                inn_match = INN_PATTERN.search(page_text)
-                if inn_match and not result.inn:
-                    result.inn = inn_match.group(1)
-                    result.source_url = url
+        if not text:
+            text = await _scrape_with_http(url)
+            if text and not result.method:
+                result.method = "http"
 
-                ogrn_match = OGRN_PATTERN.search(page_text)
-                if ogrn_match and not result.ogrn:
-                    result.ogrn = ogrn_match.group(1)
-                    if not result.source_url:
-                        result.source_url = url
+        if not text:
+            continue
 
-                # Если нашли и ИНН и ОГРН — достаточно
-                if result.inn and result.ogrn:
-                    break
+        _extract_from_text(text, result)
 
-            except Exception as e:
-                logger.debug(f"Failed to fetch {url}: {e}")
-                continue
+        if not result.source_url:
+            result.source_url = url
 
-    if not all_text:
-        return result
-
-    # Ищем юридические названия во всём собранном тексте
-    legal_names = set()
-    for match in LEGAL_NAME_PATTERN.finditer(all_text):
-        full = match.group(0).strip()
-        full = full.replace("\u00ab", '"').replace("\u00bb", '"').replace("\u201c", '"').replace("\u201d", '"')
-        legal_names.add(full)
-    if legal_names:
-        result.legal_names = list(legal_names)[:5]
+        # Нашли ИНН или ОГРН — достаточно
+        if result.inn or result.ogrn:
+            break
 
     return result
