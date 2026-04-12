@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { CategoryForm } from "@/components/CategoryForm";
 
 interface PriceSegment {
   id: number;
@@ -26,12 +27,15 @@ function formatPrice(v: number | null) {
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
 
-  useEffect(() => {
+  const loadCategories = useCallback(() => {
     api.get<Category[]>("/categories")
       .then(setCategories)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadCategories(); }, [loadCategories]);
 
   const topLevel = categories.filter((c) => c.level === 1);
 
@@ -39,7 +43,15 @@ export default function CategoriesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Категории</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Категории</h1>
+        <button
+          onClick={() => setFormOpen(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+        >
+          + Добавить
+        </button>
+      </div>
       {topLevel.map((cat) => {
         const children = categories.filter((c) => c.parent_id === cat.id);
         return (
@@ -66,6 +78,12 @@ export default function CategoriesPage() {
           </section>
         );
       })}
+      <CategoryForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={loadCategories}
+        categories={categories}
+      />
     </div>
   );
 }

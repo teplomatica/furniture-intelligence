@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { LegalEntityForm } from "@/components/LegalEntityForm";
 
 interface LegalEntity {
   id: number;
@@ -18,18 +19,29 @@ interface LegalEntity {
 export default function LegalEntitiesPage() {
   const [entities, setEntities] = useState<LegalEntity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
 
-  useEffect(() => {
+  const loadEntities = useCallback(() => {
     api.get<LegalEntity[]>("/legal-entities")
       .then(setEntities)
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { loadEntities(); }, [loadEntities]);
+
   if (loading) return <div className="text-gray-400">Загрузка...</div>;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Юридические лица</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Юридические лица</h1>
+        <button
+          onClick={() => setFormOpen(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+        >
+          + Добавить
+        </button>
+      </div>
       {entities.length === 0 ? (
         <p className="text-gray-400">Юрлица ещё не добавлены. Добавьте через API или интерфейс.</p>
       ) : (
@@ -63,6 +75,11 @@ export default function LegalEntitiesPage() {
           </table>
         </div>
       )}
+      <LegalEntityForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={loadEntities}
+      />
     </div>
   );
 }
