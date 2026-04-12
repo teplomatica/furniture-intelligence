@@ -136,6 +136,83 @@ async def sync_datanewton(le_id: int, db: AsyncSession = Depends(get_db), _: Use
     return {"synced": len(financials), "years": [r["year"] for r in financials]}
 
 
+@router.post("/discover/{company_id}", response_model=dict)
+async def discover_for_company(
+    company_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    """Автопоиск юрлица через сайт + DataNewton для одного конкурента."""
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    try:
+        scraped = await scrape_legal_info(company.website)
+        search_query = scraped.inn or scraped.ogrn
+        if not search_query and scraped.legal_names:
+            search_query = scraped.legal_names[0]
+        if not search_query:
+            search_query = company.name
+
+        dn_results = await datanewton.search_counterparty(search_query, limit=5)
+        if not dn_results:
+            return {
+                "status": "not_found",
+                "scraped_inn": scraped.inn,
+                "scraped_ogrn": scraped.ogrn,
+                "scraped_names": scraped.legal_names,
+                "source_url": scraped.source_url,
+            }
+
+        best = None
+        if scraped.inn:
+            for r in dn_results:
+                if r.get("inn") == scraped.inn and r.get("active", False):
+                    best = r
+                    break
+        if not best:
+            for r in dn_results:
+                if r.get("active", False):
+                    best = r
+                    break
+        if not best:
+            best = dn_results[0]
+
+        parsed = datanewton.parse_counterparty(best)
+        le = LegalEntity(
+            company_id=company.id,
+            inn=parsed["inn"],
+            ogrn=parsed["ogrn"],
+            legal_name=parsed["legal_name"] or company.name,
+            address=parsed.get("address"),
+            region=parsed.get("region"),
+            manager_name=parsed.get("manager_name"),
+            activity_code=parsed.get("activity_code"),
+            activity_description=parsed.get("activity_description"),
+            founded_year=parsed.get("founded_year"),
+            datanewton_id=parsed.get("datanewton_id"),
+            raw_data=parsed.get("raw_data"),
+            is_primary=True,
+        )
+        db.add(le)
+        await db.commit()
+
+        return {
+            "status": "found",
+            "legal_name": parsed["legal_name"],
+            "inn": parsed["inn"],
+            "method": "inn_from_site" if scraped.inn else "name_search",
+            "scraped_inn": scraped.inn,
+            "scraped_names": scraped.legal_names,
+            "source_url": scraped.source_url,
+        }
+
+    except Exception as e:
+        logger.error(f"Discover error for {company.name}: {e}")
+        return {"status": "error", "error": str(e)}
+
+
 @router.get("/search/datanewton", response_model=list[dict])
 async def search_datanewton(query: str, _: User = Depends(require_editor)):
     """Поиск юрлица в DataNewton по названию или ИНН."""

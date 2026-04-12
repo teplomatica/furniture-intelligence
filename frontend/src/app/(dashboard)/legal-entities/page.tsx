@@ -43,6 +43,7 @@ export default function LegalEntitiesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
+  const [discoveringCompany, setDiscoveringCompany] = useState<number | null>(null);
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -138,9 +139,25 @@ export default function LegalEntitiesPage() {
                           <span className="ml-2 text-gray-400 text-xs">{company.website}</span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-400">
-                        {les.length === 0 ? "нет юрлиц" : `${les.length} юрлиц`}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            setDiscoveringCompany(company.id);
+                            try {
+                              await api.post(`/legal-entities/discover/${company.id}`, {});
+                              loadData();
+                            } catch { }
+                            setDiscoveringCompany(null);
+                          }}
+                          disabled={discoveringCompany === company.id}
+                          className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded hover:bg-green-50 hover:text-green-600 disabled:opacity-50"
+                        >
+                          {discoveringCompany === company.id ? "..." : "Найти ЮЛ"}
+                        </button>
+                        <span className="text-xs text-gray-400">
+                          {les.length === 0 ? "нет юрлиц" : `${les.length} юрлиц`}
+                        </span>
+                      </div>
                     </div>
                     {les.length > 0 && (
                       <div className="border-t">
