@@ -18,8 +18,13 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def fix_db_url(cls, v: str) -> str:
-        if isinstance(v, str) and v.startswith("postgresql://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if not isinstance(v, str):
+            return v
+        if v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg не понимает sslmode — заменяем на ssl=require
+        v = v.replace("?sslmode=require", "?ssl=require")
+        v = v.replace("&sslmode=require", "&ssl=require")
         return v
 
 
