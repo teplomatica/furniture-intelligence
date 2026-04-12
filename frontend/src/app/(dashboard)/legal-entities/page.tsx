@@ -3,6 +3,13 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { LegalEntityForm } from "@/components/LegalEntityForm";
 
+interface Company {
+  id: number;
+  name: string;
+  website: string | null;
+  segment_group: string;
+}
+
 interface LegalEntity {
   id: number;
   company_id: number;
@@ -19,23 +26,44 @@ interface LegalEntity {
 interface DiscoverResult {
   discovered: number;
   skipped: number;
-  details: Array<{ company: string; status: string; legal_name?: string; inn?: string; error?: string }>;
+  details: Array<{ company: string; status: string; legal_name?: string; inn?: string; error?: string; method?: string }>;
 }
 
+const SEGMENT_LABELS: Record<string, string> = {
+  federal: "А: Федеральные сети",
+  online: "Б: Онлайн-ритейлеры",
+  premium: "В: Премиум",
+  marketplace: "Г: Маркетплейсы",
+};
+
 export default function LegalEntitiesPage() {
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [entities, setEntities] = useState<LegalEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
 
-  const loadEntities = useCallback(() => {
-    api.get<LegalEntity[]>("/legal-entities")
-      .then(setEntities)
+  const loadData = useCallback(() => {
+    Promise.all([
+      api.get<Company[]>("/companies?active_only=false"),
+      api.get<LegalEntity[]>("/legal-entities"),
+    ])
+      .then(([c, le]) => { setCompanies(c); setEntities(le); })
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { loadEntities(); }, [loadEntities]);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const entitiesByCompany = entities.reduce<Record<number, LegalEntity[]>>((acc, le) => {
+    (acc[le.company_id] ||= []).push(le);
+    return acc;
+  }, {});
+
+  const groupedCompanies = companies.reduce<Record<string, Company[]>>((acc, c) => {
+    (acc[c.segment_group] ||= []).push(c);
+    return acc;
+  }, {});
 
   if (loading) return <div className="text-gray-400">Загрузка...</div>;
 
@@ -51,7 +79,7 @@ export default function LegalEntitiesPage() {
               try {
                 const result = await api.post<DiscoverResult>("/legal-entities/auto-discover", {});
                 setDiscoverResult(result);
-                loadEntities();
+                loadData();
               } catch { }
               setDiscovering(false);
             }}
@@ -68,10 +96,11 @@ export default function LegalEntitiesPage() {
           </button>
         </div>
       </div>
+
       {discoverResult && (
         <div className="mb-6 bg-white rounded-lg border p-4">
           <h3 className="font-semibold mb-2">
-            Результат автопоиска: найдено {discoverResult.discovered}, пропущено {discoverResult.skipped}
+            Результат: найдено {discoverResult.discovered}, пропущено {discoverResult.skipped}
           </h3>
           <div className="space-y-1 text-sm max-h-48 overflow-y-auto">
             {discoverResult.details.map((d, i) => (
@@ -82,6 +111,7 @@ export default function LegalEntitiesPage() {
                 <span className="font-medium">{d.company}</span>
                 {d.legal_name && <span className="text-gray-500">→ {d.legal_name}</span>}
                 {d.inn && <span className="text-gray-400 font-mono text-xs">ИНН: {d.inn}</span>}
+                {d.method && <span className="text-blue-400 text-xs">({d.method})</span>}
                 {d.error && <span className="text-red-400 text-xs">{d.error}</span>}
               </div>
             ))}
@@ -89,57 +119,68 @@ export default function LegalEntitiesPage() {
           <button onClick={() => setDiscoverResult(null)} className="mt-2 text-xs text-gray-400 hover:text-gray-600">Закрыть</button>
         </div>
       )}
-      {entities.length === 0 ? (
-        <p className="text-gray-400">Юрлица ещё не добавлены. Добавьте через API или интерфейс.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-4 py-2">Название</th>
-                <th className="text-left px-4 py-2">ИНН</th>
-                <th className="text-left px-4 py-2">ОГРН</th>
-                <th className="text-left px-4 py-2">Регион</th>
-                <th className="text-left px-4 py-2">Год основания</th>
-                <th className="text-left px-4 py-2">Руководитель</th>
-                <th className="w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {entities.map((le) => (
-                <tr key={le.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium">
-                    {le.legal_name}
-                    {le.is_primary && <span className="ml-2 text-xs text-blue-500">основное</span>}
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs">{le.inn || "—"}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{le.ogrn || "—"}</td>
-                  <td className="px-4 py-2">{le.region || "—"}</td>
-                  <td className="px-4 py-2">{le.founded_year || "—"}</td>
-                  <td className="px-4 py-2">{le.manager_name || "—"}</td>
-                  <td className="px-2 py-2">
-                    <button
-                      onClick={async () => {
-                        if (confirm(`Удалить ${le.legal_name}?`)) {
-                          await api.delete(`/legal-entities/${le.id}`);
-                          loadEntities();
-                        }
-                      }}
-                      className="text-gray-300 hover:text-red-500 text-sm"
-                    >
-                      &times;
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+
+      {Object.entries(SEGMENT_LABELS).map(([group, label]) => {
+        const groupCompanies = groupedCompanies[group] || [];
+        if (groupCompanies.length === 0) return null;
+        return (
+          <section key={group} className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">{label}</h2>
+            <div className="space-y-2">
+              {groupCompanies.map((company) => {
+                const les = entitiesByCompany[company.id] || [];
+                return (
+                  <div key={company.id} className="bg-white rounded-lg border">
+                    <div className="px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold">{company.name}</span>
+                        {company.website && (
+                          <span className="ml-2 text-gray-400 text-xs">{company.website}</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {les.length === 0 ? "нет юрлиц" : `${les.length} юрлиц`}
+                      </span>
+                    </div>
+                    {les.length > 0 && (
+                      <div className="border-t">
+                        {les.map((le) => (
+                          <div key={le.id} className="px-4 py-2 flex items-center gap-4 text-sm hover:bg-gray-50 border-t border-gray-50 first:border-t-0">
+                            <span className="text-gray-300 pl-2">└</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{le.legal_name}</span>
+                              {le.is_primary && <span className="ml-2 text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">основное</span>}
+                            </div>
+                            <span className="font-mono text-xs text-gray-500 whitespace-nowrap">{le.inn || "—"}</span>
+                            <span className="text-xs text-gray-400 whitespace-nowrap w-20">{le.region || ""}</span>
+                            <span className="text-xs text-gray-400 w-10">{le.founded_year || ""}</span>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Удалить ${le.legal_name}?`)) {
+                                  await api.delete(`/legal-entities/${le.id}`);
+                                  loadData();
+                                }
+                              }}
+                              className="text-gray-300 hover:text-red-500"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+
       <LegalEntityForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSaved={loadEntities}
+        onSaved={loadData}
       />
     </div>
   );
