@@ -1,14 +1,20 @@
+import asyncio
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_editor
 from app.models.user import User
+from app.models.company import Company
 from app.models.legal_entity import LegalEntity
 from app.models.competitor_data import CompetitorFinancial, DataSource
 from app.services.datanewton import datanewton
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/legal-entities", tags=["legal_entities"])
 
@@ -125,3 +131,74 @@ async def search_datanewton(query: str, _: User = Depends(require_editor)):
     """Поиск юрлица в DataNewton по названию или ИНН."""
     results = await datanewton.search_counterparty(query, limit=10)
     return [datanewton.parse_counterparty(r) for r in results]
+
+
+@router.post("/auto-discover", response_model=dict)
+async def auto_discover_legal_entities(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    """Автопоиск юрлиц через DataNewton для всех конкурентов без привязанных ЮЛ."""
+    # Компании у которых ещё нет юрлиц
+    result = await db.execute(
+        select(Company)
+        .outerjoin(LegalEntity)
+        .where(Company.is_active == True, LegalEntity.id == None)
+        .order_by(Company.id)
+    )
+    companies_without_le = result.scalars().all()
+
+    if not companies_without_le:
+        return {"discovered": 0, "skipped": 0, "details": [], "message": "Все компании уже имеют юрлица"}
+
+    discovered = 0
+    skipped = 0
+    details = []
+
+    for company in companies_without_le:
+        try:
+            results = await datanewton.search_counterparty(company.name, limit=3)
+            if not results:
+                skipped += 1
+                details.append({"company": company.name, "status": "not_found"})
+                continue
+
+            # Берём первый активный результат
+            best = None
+            for r in results:
+                if r.get("active", False):
+                    best = r
+                    break
+            if not best:
+                best = results[0]
+
+            parsed = datanewton.parse_counterparty(best)
+            le = LegalEntity(
+                company_id=company.id,
+                inn=parsed["inn"],
+                ogrn=parsed["ogrn"],
+                legal_name=parsed["legal_name"] or company.name,
+                address=parsed.get("address"),
+                region=parsed.get("region"),
+                manager_name=parsed.get("manager_name"),
+                activity_code=parsed.get("activity_code"),
+                activity_description=parsed.get("activity_description"),
+                founded_year=parsed.get("founded_year"),
+                datanewton_id=parsed.get("datanewton_id"),
+                raw_data=parsed.get("raw_data"),
+                is_primary=True,
+            )
+            db.add(le)
+            discovered += 1
+            details.append({"company": company.name, "status": "found", "legal_name": parsed["legal_name"], "inn": parsed["inn"]})
+
+            # Пауза между запросами (rate limit 200/мин)
+            await asyncio.sleep(0.5)
+
+        except Exception as e:
+            logger.error(f"DataNewton error for {company.name}: {e}")
+            skipped += 1
+            details.append({"company": company.name, "status": "error", "error": str(e)})
+
+    await db.commit()
+    return {"discovered": discovered, "skipped": skipped, "details": details}
