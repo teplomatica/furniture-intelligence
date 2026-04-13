@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.database import engine, async_session_maker, Base
 from app.core.auth import hash_password
@@ -29,10 +29,28 @@ async def create_superadmin():
         await db.commit()
 
 
+async def migrate_add_columns():
+    """Add missing columns to existing tables (create_all doesn't alter)."""
+    migrations = [
+        ("fi_companies", "is_self", "BOOLEAN DEFAULT FALSE"),
+        ("fi_companies", "scrape_schedule", "VARCHAR(50)"),
+        ("fi_companies", "last_scraped_at", "TIMESTAMP"),
+    ]
+    async with engine.begin() as conn:
+        for table, column, col_type in migrations:
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+                ))
+            except Exception:
+                pass  # column already exists or other DB
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await migrate_add_columns()
     await create_superadmin()
     yield
     await engine.dispose()
