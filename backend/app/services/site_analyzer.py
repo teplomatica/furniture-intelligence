@@ -139,32 +139,50 @@ async def analyze_site_events(
     reg_result = await db.execute(select(Region).where(Region.is_active == True))
     our_regions = [(r.id, r.name) for r in reg_result.scalars().all()]
 
-    # === Step 1: Scrape main page ===
-    yield {"step": "scraping", "message": f"Загрузка {company.website}..."}
+    # === Step 1: Scrape multiple pages for better coverage ===
+    pages_to_try = [
+        (base_url, "главная"),
+        (f"{base_url}/catalog/", "каталог"),
+        (f"{base_url}/katalog/", "каталог (2)"),
+        (f"{base_url}/categories/", "категории"),
+        (f"{base_url}/shop/", "магазин"),
+    ]
 
-    cache_key = f"{base_url}/#site-analysis"
-    text = await get_cached(db, cache_key, ttl_days=1)  # short TTL for analysis
-    if text:
-        yield {"step": "cache_hit", "message": "Из кэша"}
-    else:
-        text = await scrape_with_firecrawl(base_url, wait_for=wait_for)
-        if not text:
-            text = await scrape_with_firecrawl(f"{base_url}/catalog/", wait_for=wait_for)
-        if text:
-            await save_cache(db, cache_key, text)
+    combined_text = ""
+    for url, label in pages_to_try:
+        yield {"step": "scraping", "message": f"Загрузка {label}: {url}..."}
 
-    if not text:
-        yield {"step": "error", "message": "Не удалось загрузить сайт"}
+        cache_key = f"{url}#site-analysis"
+        page_text = await get_cached(db, cache_key, ttl_days=1)
+        if page_text:
+            yield {"step": "cache_hit", "message": f"{label}: из кэша ({len(page_text)} символов)"}
+        else:
+            page_text = await scrape_with_firecrawl(url, wait_for=wait_for)
+            if page_text:
+                await save_cache(db, cache_key, page_text)
+                yield {"step": "scraped", "message": f"{label}: получено {len(page_text)} символов"}
+            else:
+                yield {"step": "scraped", "message": f"{label}: не удалось загрузить"}
+
+        if page_text:
+            combined_text += f"\n\n--- Страница: {url} ---\n\n{page_text}"
+
+        # Stop if we have enough content
+        if len(combined_text) > 20_000:
+            break
+
+    if not combined_text:
+        yield {"step": "error", "message": "Не удалось загрузить ни одну страницу сайта"}
         return
 
-    yield {"step": "scraped", "message": f"Получено {len(text)} символов"}
+    yield {"step": "scraped", "message": f"Итого: {len(combined_text)} символов со всех страниц"}
 
     # === Step 2: Discover categories ===
     yield {"step": "analyzing_categories", "message": "Анализ категорий через Claude AI..."}
 
-    site_categories = await _call_claude(CATEGORY_PROMPT, text)
-    if not site_categories or not isinstance(site_categories, list):
-        yield {"step": "error", "message": "Не удалось определить категории"}
+    site_categories = await _call_claude(CATEGORY_PROMPT, combined_text)
+    if not site_categories or not isinstance(site_categories, list) or len(site_categories) == 0:
+        yield {"step": "error", "message": "Не удалось определить категории. Возможно сайт сильно защищён от парсинга."}
         return
 
     # Map to our categories
@@ -204,7 +222,7 @@ async def analyze_site_events(
     # === Step 3: Discover regions ===
     yield {"step": "analyzing_regions", "message": "Анализ регионов через Claude AI..."}
 
-    region_info = await _call_claude(REGION_PROMPT, text)
+    region_info = await _call_claude(REGION_PROMPT, combined_text)
     if not region_info or not isinstance(region_info, dict):
         yield {"step": "regions_done", "message": "Не удалось определить регионы", "regions": {
             "has_region_selector": False, "method": "none", "key": None, "cities": [],
