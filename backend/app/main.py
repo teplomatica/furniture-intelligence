@@ -9,8 +9,9 @@ from app.core.config import settings
 from app.models import User, UserRole, UserStatus
 from app.api import (
     auth, companies, legal_entities, categories, financials, traffic,
-    assortment, regions, offers, settings, company_region_config,
+    assortment, regions, offers, company_region_config,
 )
+from app.api import settings as settings_api
 
 
 async def create_superadmin():
@@ -56,7 +57,7 @@ app.include_router(traffic.router)
 app.include_router(assortment.router)
 app.include_router(regions.router)
 app.include_router(offers.router)
-app.include_router(settings.router)
+app.include_router(settings_api.router)
 app.include_router(company_region_config.router)
 
 
