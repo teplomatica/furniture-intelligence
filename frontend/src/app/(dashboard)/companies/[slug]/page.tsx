@@ -9,6 +9,7 @@ import { FinancialsSection } from "@/components/company-detail/FinancialsSection
 import { TrafficSection } from "@/components/company-detail/TrafficSection";
 import { AssortmentSection } from "@/components/company-detail/AssortmentSection";
 import { OffersSection } from "@/components/company-detail/OffersSection";
+import { ScrapingConfigSection } from "@/components/company-detail/ScrapingConfigSection";
 import { RefreshPanel } from "@/components/company-detail/RefreshPanel";
 import { CompanyForm } from "@/components/CompanyForm";
 import { LegalEntityForm } from "@/components/LegalEntityForm";
@@ -16,6 +17,7 @@ import { FinancialForm } from "@/components/FinancialForm";
 import { TrafficForm } from "@/components/TrafficForm";
 import { AssortmentForm } from "@/components/AssortmentForm";
 import { OfferForm } from "@/components/OfferForm";
+import { ScrapingConfigForm } from "@/components/ScrapingConfigForm";
 
 interface Company {
   id: number;
@@ -142,6 +144,9 @@ export default function CompanyDetailPage() {
   const [trafficFormOpen, setTrafficFormOpen] = useState(false);
   const [assortFormOpen, setAssortFormOpen] = useState(false);
   const [offerFormOpen, setOfferFormOpen] = useState(false);
+  const [configFormOpen, setConfigFormOpen] = useState(false);
+  const [scrapingConfigs, setScrapingConfigs] = useState<any[]>([]);
+  const [editConfig, setEditConfig] = useState<any | null>(null);
   const [editFinancial, setEditFinancial] = useState<Financial | null>(null);
   const [editTraffic, setEditTraffic] = useState<Traffic | null>(null);
   const [editAssortment, setEditAssortment] = useState<Assortment | null>(null);
@@ -159,13 +164,14 @@ export default function CompanyDetailPage() {
   }, [slug]);
 
   const loadDetails = useCallback(async (companyId: number) => {
-    const [le, fin, tr, assort, cats, regs] = await Promise.all([
+    const [le, fin, tr, assort, cats, regs, configs] = await Promise.all([
       api.get<LegalEntity[]>(`/legal-entities?company_id=${companyId}`),
       api.get<Financial[]>(`/financials?company_id=${companyId}`),
       api.get<Traffic[]>(`/traffic?company_id=${companyId}`),
       api.get<Assortment[]>(`/assortment?company_id=${companyId}`),
       api.get<Category[]>("/categories"),
       api.get<Region[]>("/regions"),
+      api.get<any[]>(`/company-region-configs?company_id=${companyId}`),
     ]);
     setEntities(le);
     setFinancials(fin);
@@ -173,6 +179,7 @@ export default function CompanyDetailPage() {
     setAssortment(assort);
     setCategories(cats);
     setRegions(regs);
+    setScrapingConfigs(configs);
   }, []);
 
   const loadOffers = useCallback(async (companyId: number) => {
@@ -247,6 +254,8 @@ export default function CompanyDetailPage() {
           companyId={company.id}
           hasLegalEntities={hasLegalEntities}
           hasOgrn={hasOgrn}
+          hasScrapingConfig={scrapingConfigs.length > 0}
+          regions={regions}
           onClose={() => setRefreshOpen(false)}
           onComplete={reloadDetails}
         />
@@ -276,6 +285,15 @@ export default function CompanyDetailPage() {
         categories={categories}
         onAdd={() => { setEditAssortment(null); setAssortFormOpen(true); }}
         onEdit={(a) => { setEditAssortment(a); setAssortFormOpen(true); }}
+      />
+
+      <ScrapingConfigSection
+        configs={scrapingConfigs}
+        regions={regions}
+        companyId={company.id}
+        onAdd={() => { setEditConfig(null); setConfigFormOpen(true); }}
+        onEdit={(c) => { setEditConfig(c); setConfigFormOpen(true); }}
+        onReload={reloadDetails}
       />
 
       <OffersSection
@@ -347,6 +365,15 @@ export default function CompanyDetailPage() {
         regions={regions}
         categories={categories}
         editRecord={editOffer}
+      />
+
+      <ScrapingConfigForm
+        open={configFormOpen}
+        onClose={() => setConfigFormOpen(false)}
+        onSaved={reloadDetails}
+        companyId={company.id}
+        regions={regions}
+        editConfig={editConfig}
       />
     </div>
   );

@@ -193,7 +193,8 @@ async def sync_financials_events(
 
 
 async def refresh_company_stream(
-    company_id: int, sections: list[str], db: AsyncSession
+    company_id: int, sections: list[str], db: AsyncSession,
+    region_id: int | None = None,
 ) -> AsyncGenerator[str, None]:
     """Orchestrate multi-section refresh, yielding SSE-formatted strings."""
     if "legal_entities" in sections:
@@ -213,6 +214,9 @@ async def refresh_company_stream(
         yield _sse({"section": "assortment", "step": "skipped", "message": "Автоматический сбор ассортимента пока не поддерживается"})
 
     if "offers" in sections:
-        yield _sse({"section": "offers", "step": "skipped", "message": "Автоматический сбор офферов пока не поддерживается"})
+        from app.services.offer_scraper import scrape_offers_events
+        yield _sse({"section": "offers", "step": "start", "message": "Сбор офферов..."})
+        async for event in scrape_offers_events(company_id, region_id, db):
+            yield _sse({"section": "offers", **event})
 
     yield _sse({"section": "all", "step": "complete", "message": "Обновление завершено"})

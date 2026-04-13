@@ -7,6 +7,7 @@ from app.core.database import async_session_maker, engine, Base
 from app.models.company import Company, SegmentGroup, Positioning
 from app.models.category import Category, PriceSegment
 from app.models.region import Region
+from app.models.setting import Setting
 
 COMPANIES = [
     # А: Крупные федеральные сети
@@ -75,6 +76,16 @@ CATEGORIES = [
     ], [(0, 50000), (50000, 150000), (150000, None)]),
 ]
 
+DEFAULT_SETTINGS = [
+    dict(key="cache_ttl_days", value="7", description="TTL кэша скрапинга (дни)"),
+    dict(key="max_pages_per_catalog", value="10", description="Макс. страниц пагинации на один catalog URL"),
+    dict(key="rate_limit_seconds", value="1.5", description="Пауза между Firecrawl вызовами (секунды)"),
+    dict(key="firecrawl_wait_for", value="2000", description="Ожидание рендеринга в Firecrawl (мс)"),
+    dict(key="debug_mode", value="false", description="Debug mode: ограничивает количество запросов"),
+    dict(key="debug_max_api_calls", value="3", description="Макс. Firecrawl вызовов за один refresh в debug mode"),
+    dict(key="debug_max_offers_per_page", value="5", description="Макс. офферов с одной страницы в debug mode"),
+]
+
 REGIONS = [
     dict(name="Москва", slug="moscow", sort_order=0, city_firecrawl="Москва"),
     dict(name="Санкт-Петербург", slug="spb", sort_order=1, city_firecrawl="Санкт-Петербург"),
@@ -130,6 +141,13 @@ async def seed():
             existing = await db.execute(sel(Region).where(Region.slug == data["slug"]))
             if not existing.scalar_one_or_none():
                 db.add(Region(**data))
+
+        # Настройки
+        for data in DEFAULT_SETTINGS:
+            from sqlalchemy import select as sel2
+            existing = await db.execute(sel2(Setting).where(Setting.key == data["key"]))
+            if not existing.scalar_one_or_none():
+                db.add(Setting(**data))
 
         await db.commit()
         print("Seed completed.")

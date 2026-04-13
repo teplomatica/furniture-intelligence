@@ -7,6 +7,7 @@ const NAV = [
   { href: "/companies", label: "Конкуренты" },
   { href: "/categories", label: "Категории" },
   { href: "/regions", label: "Регионы" },
+  { href: "/settings", label: "Настройки" },
 ];
 
 export function Sidebar() {

@@ -12,6 +12,7 @@ from app.models.offer import (
     Offer, OfferCategoryLog, CompanyRegionConfig,
     CategorySource, LogField, StockFilterMethod, RegionMethod,
 )
+from app.models.setting import Setting
 
 __all__ = [
     "User", "UserRole", "UserStatus",
@@ -23,4 +24,5 @@ __all__ = [
     "Region",
     "Offer", "OfferCategoryLog", "CompanyRegionConfig",
     "CategorySource", "LogField", "StockFilterMethod", "RegionMethod",
+    "Setting",
 ]

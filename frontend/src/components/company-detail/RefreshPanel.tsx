@@ -9,27 +9,37 @@ const STEP_ICONS: Record<string, string> = {
   scraped: "\uD83D\uDCC4",
   searching: "\uD83D\uDD0E",
   fetching: "\uD83D\uDD0E",
+  configuring: "\u2699\uFE0F",
+  parsing: "\uD83D\uDCCB",
+  cache_hit: "\uD83D\uDCE6",
   saving: "\uD83D\uDCBE",
   done: "\u2705",
   complete: "\u2705",
   not_found: "\u274C",
   skipped: "\u23ED",
   error: "\u26A0\uFE0F",
+  debug_limit: "\uD83D\uDEA7",
 };
+
+interface Region { id: number; name: string; }
 
 interface Props {
   companyId: number;
   hasLegalEntities: boolean;
   hasOgrn: boolean;
+  hasScrapingConfig: boolean;
+  regions: Region[];
   onClose: () => void;
   onComplete: () => void;
 }
 
-export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, onComplete }: Props) {
+export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, hasScrapingConfig, regions, onClose, onComplete }: Props) {
   const [sections, setSections] = useState<Record<string, boolean>>({
     legal_entities: !hasLegalEntities,
     financials: hasLegalEntities && hasOgrn,
+    offers: false,
   });
+  const [offerRegionId, setOfferRegionId] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<SSEEvent[]>([]);
 
@@ -47,7 +57,12 @@ export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, on
     setRunning(true);
     setEvents([]);
 
-    await streamSSE(`/companies/${companyId}/refresh`, { sections: selected }, (event) => {
+    const body: any = { sections: selected };
+    if (selected.includes("offers") && offerRegionId) {
+      body.region_id = Number(offerRegionId);
+    }
+
+    await streamSSE(`/companies/${companyId}/refresh`, body, (event) => {
       setEvents((prev) => [...prev, event]);
     });
 
@@ -100,11 +115,27 @@ export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, on
             <span>Ассортимент</span>
             <span className="text-xs">нет автоисточника</span>
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-400">
-            <input type="checkbox" disabled />
-            <span>Офферы</span>
-            <span className="text-xs">скоро</span>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={sections.offers || false}
+              onChange={() => toggleSection("offers")}
+              disabled={running || !hasScrapingConfig}
+            />
+            <span>Офферы (Firecrawl)</span>
+            {!hasScrapingConfig && (
+              <span className="text-xs text-gray-400">настройте парсинг</span>
+            )}
           </label>
+          {sections.offers && (
+            <div className="ml-6">
+              <select value={offerRegionId} onChange={(e) => setOfferRegionId(e.target.value)}
+                className="px-2 py-1 border rounded text-xs" disabled={running}>
+                <option value="">Все регионы</option>
+                {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {!running && events.length === 0 && (
@@ -124,7 +155,7 @@ export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, on
                 <span>{STEP_ICONS[e.step] || "\u00B7"}</span>
                 {e.section && e.section !== "all" && (
                   <span className="text-gray-400 w-20 shrink-0">
-                    {e.section === "legal_entities" ? "ЮЛ" : e.section === "financials" ? "Финансы" : e.section}
+                    {e.section === "legal_entities" ? "ЮЛ" : e.section === "financials" ? "Финансы" : e.section === "offers" ? "Офферы" : e.section}
                   </span>
                 )}
                 <span
@@ -137,6 +168,8 @@ export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, on
                       ? "text-orange-500"
                       : e.step === "skipped"
                       ? "text-gray-400"
+                      : e.step === "debug_limit"
+                      ? "text-yellow-600 font-medium"
                       : "text-gray-600"
                   }
                 >

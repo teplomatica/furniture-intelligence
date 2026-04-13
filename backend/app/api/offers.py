@@ -9,11 +9,14 @@ from app.core.deps import get_current_user, require_editor
 from app.models.user import User
 from app.models.company import Company
 from app.models.region import Region
-from app.models.category import Category, PriceSegment
 from app.models.offer import (
     Offer, OfferCategoryLog, CategorySource, LogField,
 )
 from app.models.competitor_data import DataSource
+from app.services.categorization import (
+    load_category_keywords, load_price_segments,
+    match_category, match_segment, auto_categorize_offer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,70 +111,6 @@ class RecategorizeRequest(BaseModel):
     region_id: Optional[int] = None
 
 
-# --- Auto-categorization helpers ---
-
-async def _load_category_keywords(db: AsyncSession) -> list[tuple[int, str, str]]:
-    """Return list of (category_id, name, slug) for keyword matching."""
-    result = await db.execute(
-        select(Category).order_by(Category.level.desc(), Category.name)
-    )
-    return [(c.id, c.name.lower(), c.slug.lower()) for c in result.scalars().all()]
-
-
-async def _load_price_segments(db: AsyncSession) -> list[tuple[int, int, int | None, int | None]]:
-    """Return list of (segment_id, category_id, price_min, price_max)."""
-    result = await db.execute(select(PriceSegment).order_by(PriceSegment.sort_order))
-    return [
-        (s.id, s.category_id, s.price_min, s.price_max)
-        for s in result.scalars().all()
-    ]
-
-
-def _match_category(name: str, keywords: list[tuple[int, str, str]]) -> int | None:
-    name_lower = name.lower()
-    for cat_id, cat_name, cat_slug in keywords:
-        # Match category name or slug in offer name
-        if cat_name in name_lower or cat_slug.replace("-", " ") in name_lower:
-            return cat_id
-    return None
-
-
-def _match_segment(
-    category_id: int | None, price: int | None,
-    segments: list[tuple[int, int, int | None, int | None]]
-) -> int | None:
-    if category_id is None or price is None:
-        return None
-    for seg_id, seg_cat_id, seg_min, seg_max in segments:
-        if seg_cat_id != category_id:
-            continue
-        min_ok = seg_min is None or price >= seg_min
-        max_ok = seg_max is None or price <= seg_max
-        if min_ok and max_ok:
-            return seg_id
-    return None
-
-
-async def _auto_categorize_offer(
-    offer: Offer,
-    keywords: list[tuple[int, str, str]],
-    segments: list[tuple[int, int, int | None, int | None]],
-):
-    """Auto-assign category and segment if source is auto or unset."""
-    if offer.category_source == CategorySource.manual and offer.category_id is not None:
-        return  # Don't touch manual assignments
-
-    cat_id = _match_category(offer.name, keywords)
-    if cat_id:
-        offer.category_id = cat_id
-        offer.category_source = CategorySource.auto
-
-    seg_id = _match_segment(offer.category_id, offer.price, segments)
-    if seg_id and offer.segment_source != CategorySource.manual:
-        offer.price_segment_id = seg_id
-        offer.segment_source = CategorySource.auto
-
-
 def _log_change(
     offer_id: int, field: LogField, old_val: int | None, new_val: int | None,
     source: CategorySource, changed_by: str | None = None,
@@ -241,9 +180,9 @@ async def create_offer(
     if body.category_id:
         offer.category_source = CategorySource.manual
     else:
-        keywords = await _load_category_keywords(db)
-        segments = await _load_price_segments(db)
-        await _auto_categorize_offer(offer, keywords, segments)
+        keywords = await load_category_keywords(db)
+        segments = await load_price_segments(db)
+        await auto_categorize_offer(offer, keywords, segments)
 
     db.add(offer)
     await db.commit()
@@ -262,8 +201,8 @@ async def create_offers_bulk(
     if not await db.get(Region, body.region_id):
         raise HTTPException(status_code=404, detail="Region not found")
 
-    keywords = await _load_category_keywords(db)
-    segments = await _load_price_segments(db)
+    keywords = await load_category_keywords(db)
+    segments = await load_price_segments(db)
 
     created = 0
     updated = 0
@@ -295,7 +234,7 @@ async def create_offers_bulk(
 
             # Re-categorize only if source is auto
             if existing_offer.category_source == CategorySource.auto:
-                await _auto_categorize_offer(existing_offer, keywords, segments)
+                await auto_categorize_offer(existing_offer, keywords, segments)
 
             updated += 1
         else:
@@ -306,7 +245,7 @@ async def create_offers_bulk(
                 batch_id=body.batch_id,
                 **item.model_dump(),
             )
-            await _auto_categorize_offer(offer, keywords, segments)
+            await auto_categorize_offer(offer, keywords, segments)
             db.add(offer)
             created += 1
 
@@ -416,14 +355,14 @@ async def recategorize_offers(
     result = await db.execute(q)
     offers = result.scalars().all()
 
-    keywords = await _load_category_keywords(db)
-    segments = await _load_price_segments(db)
+    keywords = await load_category_keywords(db)
+    segments = await load_price_segments(db)
 
     categorized = 0
     for offer in offers:
         old_cat = offer.category_id
         old_seg = offer.price_segment_id
-        await _auto_categorize_offer(offer, keywords, segments)
+        await auto_categorize_offer(offer, keywords, segments)
         if offer.category_id != old_cat or offer.price_segment_id != old_seg:
             categorized += 1
 

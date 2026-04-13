@@ -1,16 +1,14 @@
 """Парсинг ИНН/ОГРН с сайтов конкурентов через Firecrawl с кешированием."""
 import re
 import logging
-from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-import httpx
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
+from app.services.scrape_utils import (
+    get_cached, save_cache, scrape_with_firecrawl, scrape_with_http,
+)
 
 logger = logging.getLogger(__name__)
-
-CACHE_TTL_DAYS = 7
 
 # Страницы с юридической информацией (приоритет: документы → контакты → главная)
 LEGAL_PATHS = [
@@ -75,65 +73,6 @@ def _extract_from_text(text: str, result: ScrapedLegalInfo) -> None:
                 break
 
 
-async def _get_cached(db: AsyncSession, url: str) -> str | None:
-    from app.models.scrape_cache import ScrapeCache
-    result = await db.execute(
-        select(ScrapeCache).where(
-            ScrapeCache.url == url,
-            ScrapeCache.scraped_at > datetime.utcnow() - timedelta(days=CACHE_TTL_DAYS),
-        )
-    )
-    cached = result.scalar_one_or_none()
-    return cached.content if cached else None
-
-
-async def _save_cache(db: AsyncSession, url: str, content: str) -> None:
-    from app.models.scrape_cache import ScrapeCache
-    result = await db.execute(select(ScrapeCache).where(ScrapeCache.url == url))
-    existing = result.scalar_one_or_none()
-    if existing:
-        existing.content = content
-        existing.scraped_at = datetime.utcnow()
-    else:
-        db.add(ScrapeCache(url=url, content=content))
-    await db.flush()
-
-
-async def _scrape_with_firecrawl(url: str) -> str | None:
-    if not settings.firecrawl_api_key:
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                "https://api.firecrawl.dev/v1/scrape",
-                headers={"Authorization": f"Bearer {settings.firecrawl_api_key}"},
-                json={"url": url, "formats": ["markdown"]},
-            )
-            if r.status_code != 200:
-                logger.debug(f"Firecrawl {r.status_code} for {url}")
-                return None
-            data = r.json()
-            return data.get("data", {}).get("markdown", "")
-    except Exception as e:
-        logger.debug(f"Firecrawl error for {url}: {e}")
-        return None
-
-
-async def _scrape_with_http(url: str) -> str | None:
-    try:
-        async with httpx.AsyncClient(
-            timeout=10,
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-        ) as client:
-            r = await client.get(url)
-            if r.status_code == 200 and len(r.text) > 500:
-                return r.text
-    except Exception as e:
-        logger.debug(f"HTTP error for {url}: {e}")
-    return None
-
-
 async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> ScrapedLegalInfo:
     """Парсит сайт конкурента в поисках ИНН, ОГРН, юр. названия. Кеширует результат."""
     if not website:
@@ -149,7 +88,7 @@ async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> Scr
         # 1. Проверяем кеш
         text = None
         if db:
-            text = await _get_cached(db, url)
+            text = await get_cached(db, url)
             if text:
                 result.cache_hits += 1
                 if not result.method:
@@ -157,21 +96,21 @@ async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> Scr
 
         # 2. Firecrawl (рендерит JS)
         if not text and use_firecrawl:
-            text = await _scrape_with_firecrawl(url)
+            text = await scrape_with_firecrawl(url)
             if text:
                 result.api_calls += 1
                 result.method = "firecrawl"
                 if db:
-                    await _save_cache(db, url, text)
+                    await save_cache(db, url, text)
 
         # 3. HTTP фоллбэк
         if not text:
-            text = await _scrape_with_http(url)
+            text = await scrape_with_http(url)
             if text:
                 if not result.method:
                     result.method = "http"
                 if db:
-                    await _save_cache(db, url, text)
+                    await save_cache(db, url, text)
 
         if not text:
             continue

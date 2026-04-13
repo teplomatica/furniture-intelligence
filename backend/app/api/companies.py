@@ -110,7 +110,8 @@ async def delete_company(company_id: int, db: AsyncSession = Depends(get_db), _:
 
 
 class RefreshRequest(BaseModel):
-    sections: list[str]  # ["legal_entities", "financials"]
+    sections: list[str]  # ["legal_entities", "financials", "offers"]
+    region_id: int | None = None  # for offer scraping
 
 
 @router.post("/{company_id}/refresh")
@@ -124,6 +125,6 @@ async def refresh_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return StreamingResponse(
-        refresh_company_stream(company_id, body.sections, db),
+        refresh_company_stream(company_id, body.sections, db, region_id=body.region_id),
         media_type="text/event-stream",
     )
