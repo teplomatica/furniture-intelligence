@@ -25,7 +25,12 @@ async def load_price_segments(db: AsyncSession) -> list[tuple[int, int, int | No
 def match_category(name: str, keywords: list[tuple[int, str, str]]) -> int | None:
     name_lower = name.lower()
     for cat_id, cat_name, cat_slug in keywords:
+        # Exact substring
         if cat_name in name_lower or cat_slug.replace("-", " ") in name_lower:
+            return cat_id
+        # Russian morphology: strip endings (диваны→диван, кровати→кроват, шкафы→шкаф)
+        root = cat_name[:max(4, len(cat_name) - 2)]
+        if len(root) >= 3 and root in name_lower:
             return cat_id
     return None
 
