@@ -22,6 +22,8 @@ class CompanyOut(BaseModel):
     positioning: Optional[Positioning]
     notes: Optional[str]
     is_active: bool
+    is_self: bool
+    scrape_schedule: Optional[str]
 
     model_config = {"from_attributes": True}
 
@@ -33,6 +35,7 @@ class CompanyCreate(BaseModel):
     segment_group: SegmentGroup
     positioning: Optional[Positioning] = None
     notes: Optional[str] = None
+    is_self: bool = False
 
 
 class CompanyUpdate(BaseModel):
@@ -42,6 +45,7 @@ class CompanyUpdate(BaseModel):
     positioning: Optional[Positioning] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    scrape_schedule: Optional[str] = None
 
 
 @router.get("", response_model=list[CompanyOut])

@@ -10,6 +10,8 @@ from app.models.region import Region
 from app.models.setting import Setting
 
 COMPANIES = [
+    # Мы
+    dict(name="Divan.ru", slug="divan", website="divan.ru", segment_group=SegmentGroup.online, positioning=Positioning.mid, notes="Мы", is_self=True),
     # А: Крупные федеральные сети
     dict(name="Hoff", slug="hoff", website="hoff.ru", segment_group=SegmentGroup.federal, positioning=Positioning.mid, notes="Крупнейший омниканальный ритейлер"),
     dict(name="Askona", slug="askona", website="askona.ru", segment_group=SegmentGroup.federal, positioning=Positioning.mid, notes="Фокус на матрасы и сон"),

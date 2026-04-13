@@ -26,6 +26,7 @@ interface Company {
   positioning: string | null;
   notes: string | null;
   is_active: boolean;
+  is_self: boolean;
 }
 
 interface CountItem {
@@ -96,7 +97,9 @@ export default function CompaniesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const grouped = companies.reduce<Record<string, Company[]>>((acc, c) => {
+  const selfCompanies = companies.filter((c) => c.is_self);
+  const competitors = companies.filter((c) => !c.is_self);
+  const grouped = competitors.reduce<Record<string, Company[]>>((acc, c) => {
     (acc[c.segment_group] ||= []).push(c);
     return acc;
   }, {});
@@ -114,6 +117,59 @@ export default function CompaniesPage() {
           + Добавить
         </button>
       </div>
+
+      {selfCompanies.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-3 text-gray-700">Мы</h2>
+          <div className="overflow-x-auto rounded-lg border-2 border-blue-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-blue-50 text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-2">Компания</th>
+                  <th className="text-left px-4 py-2">Сайт</th>
+                  <th className="text-left px-4 py-2">Позиционирование</th>
+                  <th className="text-left px-4 py-2">Данные</th>
+                  <th className="w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {selfCompanies.map((c) => (
+                  <tr key={c.id} className="hover:bg-blue-50/50">
+                    <td className="px-4 py-2">
+                      <Link href={`/companies/${c.slug}`} className="font-medium text-blue-600 hover:underline">
+                        {c.name}
+                      </Link>
+                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">Мы</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {c.website ? (
+                        <a href={`https://${c.website}`} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:underline">
+                          {c.website}
+                        </a>
+                      ) : "\u2014"}
+                    </td>
+                    <td className="px-4 py-2">{c.positioning ? POSITIONING_LABELS[c.positioning] : "\u2014"}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-2 text-xs">
+                        <span className={`px-1.5 py-0.5 rounded ${(leCounts[c.id] || 0) > 0 ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-400"}`}>
+                          {leCounts[c.id] || 0} ЮЛ
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded ${(finCounts[c.id] || 0) > 0 ? "bg-purple-50 text-purple-600" : "bg-gray-100 text-gray-400"}`}>
+                          {finCounts[c.id] || 0} фин
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <button onClick={(e) => { e.stopPropagation(); setEditCompany(c); setFormOpen(true); }}
+                        className="text-gray-400 hover:text-blue-600 text-sm">&#9998;</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {Object.entries(SEGMENT_LABELS).map(([group, label]) => {
         const items = grouped[group] || [];

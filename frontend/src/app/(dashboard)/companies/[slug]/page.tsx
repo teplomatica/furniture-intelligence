@@ -18,6 +18,7 @@ import { TrafficForm } from "@/components/TrafficForm";
 import { AssortmentForm } from "@/components/AssortmentForm";
 import { OfferForm } from "@/components/OfferForm";
 import { ScrapingConfigForm } from "@/components/ScrapingConfigForm";
+import { SiteAnalysisWizard } from "@/components/company-detail/SiteAnalysisWizard";
 
 interface Company {
   id: number;
@@ -28,6 +29,7 @@ interface Company {
   positioning: string | null;
   notes: string | null;
   is_active: boolean;
+  is_self: boolean;
 }
 
 interface LegalEntity {
@@ -145,6 +147,7 @@ export default function CompanyDetailPage() {
   const [assortFormOpen, setAssortFormOpen] = useState(false);
   const [offerFormOpen, setOfferFormOpen] = useState(false);
   const [configFormOpen, setConfigFormOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [scrapingConfigs, setScrapingConfigs] = useState<any[]>([]);
   const [editConfig, setEditConfig] = useState<any | null>(null);
   const [editFinancial, setEditFinancial] = useState<Financial | null>(null);
@@ -294,6 +297,7 @@ export default function CompanyDetailPage() {
         onAdd={() => { setEditConfig(null); setConfigFormOpen(true); }}
         onEdit={(c) => { setEditConfig(c); setConfigFormOpen(true); }}
         onReload={reloadDetails}
+        onAnalyze={() => setWizardOpen(true)}
       />
 
       <OffersSection
@@ -374,6 +378,15 @@ export default function CompanyDetailPage() {
         companyId={company.id}
         regions={regions}
         editConfig={editConfig}
+      />
+
+      <SiteAnalysisWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        companyId={company.id}
+        regions={regions}
+        categories={categories}
+        onApplied={reloadDetails}
       />
     </div>
   );

@@ -22,6 +22,7 @@ interface Company {
   positioning: string | null;
   notes: string | null;
   is_active: boolean;
+  is_self: boolean;
 }
 
 interface Props {
@@ -36,7 +37,14 @@ export function CompanyHeader({ company, onEdit, onRefresh, refreshing }: Props)
     <div className="bg-white rounded-lg border p-6 mb-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{company.name}</h1>
+          <h1 className="text-2xl font-bold">
+            {company.name}
+            {company.is_self && (
+              <span className="ml-3 text-sm px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-medium align-middle">
+                Мы
+              </span>
+            )}
+          </h1>
           <div className="flex items-center gap-3 mt-2">
             {company.website && (
               <a

@@ -29,6 +29,9 @@ class Company(Base):
     positioning: Mapped[Positioning | None] = mapped_column(Enum(Positioning), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    is_self: Mapped[bool] = mapped_column(default=False)  # "наша" компания (Divan.ru)
+    scrape_schedule: Mapped[str | None] = mapped_column(String(50), nullable=True)  # cron, e.g. "0 6 * * 1"
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
