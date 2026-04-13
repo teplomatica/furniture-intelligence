@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 
 const NAV = [
+  { href: "/dashboard", label: "Дашборд" },
   { href: "/companies", label: "Конкуренты" },
   { href: "/categories", label: "Категории" },
   { href: "/regions", label: "Регионы" },
