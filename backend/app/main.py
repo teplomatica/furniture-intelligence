@@ -7,7 +7,7 @@ from app.core.database import engine, async_session_maker, Base
 from app.core.auth import hash_password
 from app.core.config import settings
 from app.models import User, UserRole, UserStatus
-from app.api import auth, companies, legal_entities, categories
+from app.api import auth, companies, legal_entities, categories, financials, traffic, assortment
 
 
 async def create_superadmin():
@@ -48,6 +48,9 @@ app.include_router(auth.router)
 app.include_router(companies.router)
 app.include_router(legal_entities.router)
 app.include_router(categories.router)
+app.include_router(financials.router)
+app.include_router(traffic.router)
+app.include_router(assortment.router)
 
 
 @app.get("/health")
