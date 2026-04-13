@@ -212,4 +212,7 @@ async def refresh_company_stream(
     if "assortment" in sections:
         yield _sse({"section": "assortment", "step": "skipped", "message": "Автоматический сбор ассортимента пока не поддерживается"})
 
+    if "offers" in sections:
+        yield _sse({"section": "offers", "step": "skipped", "message": "Автоматический сбор офферов пока не поддерживается"})
+
     yield _sse({"section": "all", "step": "complete", "message": "Обновление завершено"})

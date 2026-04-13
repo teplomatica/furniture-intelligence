@@ -6,6 +6,7 @@ import asyncio
 from app.core.database import async_session_maker, engine, Base
 from app.models.company import Company, SegmentGroup, Positioning
 from app.models.category import Category, PriceSegment
+from app.models.region import Region
 
 COMPANIES = [
     # А: Крупные федеральные сети
@@ -74,6 +75,15 @@ CATEGORIES = [
     ], [(0, 50000), (50000, 150000), (150000, None)]),
 ]
 
+REGIONS = [
+    dict(name="Москва", slug="moscow", sort_order=0, city_firecrawl="Москва"),
+    dict(name="Санкт-Петербург", slug="spb", sort_order=1, city_firecrawl="Санкт-Петербург"),
+    dict(name="Новосибирск", slug="novosibirsk", sort_order=2, city_firecrawl="Новосибирск"),
+    dict(name="Екатеринбург", slug="ekaterinburg", sort_order=3, city_firecrawl="Екатеринбург"),
+    dict(name="Краснодар", slug="krasnodar", sort_order=4, city_firecrawl="Краснодар"),
+    dict(name="Казань", slug="kazan", sort_order=5, city_firecrawl="Казань"),
+]
+
 SEGMENT_NAMES = ["Бюджет", "Средний", "Премиум"]
 
 
@@ -113,6 +123,13 @@ async def seed():
                         name=child_name, slug=child_slug,
                         parent_id=parent.id, level=2, sort_order=j
                     ))
+
+        # Регионы
+        for data in REGIONS:
+            from sqlalchemy import select as sel
+            existing = await db.execute(sel(Region).where(Region.slug == data["slug"]))
+            if not existing.scalar_one_or_none():
+                db.add(Region(**data))
 
         await db.commit()
         print("Seed completed.")

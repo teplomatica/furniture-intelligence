@@ -100,6 +100,11 @@ export function RefreshPanel({ companyId, hasLegalEntities, hasOgrn, onClose, on
             <span>Ассортимент</span>
             <span className="text-xs">нет автоисточника</span>
           </label>
+          <label className="flex items-center gap-2 text-sm text-gray-400">
+            <input type="checkbox" disabled />
+            <span>Офферы</span>
+            <span className="text-xs">скоро</span>
+          </label>
         </div>
 
         {!running && events.length === 0 && (

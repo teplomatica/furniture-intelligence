@@ -7,6 +7,11 @@ from app.models.competitor_data import (
     CompetitorAssortment, CollectionJob, DataSource, ChannelType, JobStatus
 )
 from app.models.scrape_cache import ScrapeCache
+from app.models.region import Region
+from app.models.offer import (
+    Offer, OfferCategoryLog, CompanyRegionConfig,
+    CategorySource, LogField, StockFilterMethod, RegionMethod,
+)
 
 __all__ = [
     "User", "UserRole", "UserStatus",
@@ -15,4 +20,7 @@ __all__ = [
     "Category", "PriceSegment",
     "CompetitorFinancial", "CompetitorChannel", "CompetitorTraffic",
     "CompetitorAssortment", "CollectionJob", "DataSource", "ChannelType", "JobStatus",
+    "Region",
+    "Offer", "OfferCategoryLog", "CompanyRegionConfig",
+    "CategorySource", "LogField", "StockFilterMethod", "RegionMethod",
 ]

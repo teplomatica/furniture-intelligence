@@ -8,12 +8,14 @@ import { LegalEntitiesSection } from "@/components/company-detail/LegalEntitiesS
 import { FinancialsSection } from "@/components/company-detail/FinancialsSection";
 import { TrafficSection } from "@/components/company-detail/TrafficSection";
 import { AssortmentSection } from "@/components/company-detail/AssortmentSection";
+import { OffersSection } from "@/components/company-detail/OffersSection";
 import { RefreshPanel } from "@/components/company-detail/RefreshPanel";
 import { CompanyForm } from "@/components/CompanyForm";
 import { LegalEntityForm } from "@/components/LegalEntityForm";
 import { FinancialForm } from "@/components/FinancialForm";
 import { TrafficForm } from "@/components/TrafficForm";
 import { AssortmentForm } from "@/components/AssortmentForm";
+import { OfferForm } from "@/components/OfferForm";
 
 interface Company {
   id: number;
@@ -83,6 +85,31 @@ interface Category {
   parent_id: number | null;
 }
 
+interface Region {
+  id: number;
+  name: string;
+}
+
+interface Offer {
+  id: number;
+  company_id: number;
+  region_id: number;
+  name: string;
+  url: string | null;
+  sku: string | null;
+  price: number | null;
+  price_old: number | null;
+  is_available: boolean | null;
+  category_id: number | null;
+  category_source: string;
+  price_segment_id: number | null;
+}
+
+interface OfferListResponse {
+  items: Offer[];
+  total: number;
+}
+
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -94,8 +121,18 @@ export default function CompanyDetailPage() {
   const [traffic, setTraffic] = useState<Traffic[]>([]);
   const [assortment, setAssortment] = useState<Assortment[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offersTotal, setOffersTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  // Offer filters
+  const [offerRegionId, setOfferRegionId] = useState<number | null>(null);
+  const [offerCategoryId, setOfferCategoryId] = useState<number | null>(null);
+  const [offerUncategorized, setOfferUncategorized] = useState(false);
+  const [offerPage, setOfferPage] = useState(0);
+  const offerPageSize = 50;
 
   // UI state
   const [refreshOpen, setRefreshOpen] = useState(false);
@@ -104,9 +141,11 @@ export default function CompanyDetailPage() {
   const [finFormOpen, setFinFormOpen] = useState(false);
   const [trafficFormOpen, setTrafficFormOpen] = useState(false);
   const [assortFormOpen, setAssortFormOpen] = useState(false);
+  const [offerFormOpen, setOfferFormOpen] = useState(false);
   const [editFinancial, setEditFinancial] = useState<Financial | null>(null);
   const [editTraffic, setEditTraffic] = useState<Traffic | null>(null);
   const [editAssortment, setEditAssortment] = useState<Assortment | null>(null);
+  const [editOffer, setEditOffer] = useState<Offer | null>(null);
 
   const loadCompany = useCallback(async () => {
     try {
@@ -120,30 +159,53 @@ export default function CompanyDetailPage() {
   }, [slug]);
 
   const loadDetails = useCallback(async (companyId: number) => {
-    const [le, fin, tr, assort, cats] = await Promise.all([
+    const [le, fin, tr, assort, cats, regs] = await Promise.all([
       api.get<LegalEntity[]>(`/legal-entities?company_id=${companyId}`),
       api.get<Financial[]>(`/financials?company_id=${companyId}`),
       api.get<Traffic[]>(`/traffic?company_id=${companyId}`),
       api.get<Assortment[]>(`/assortment?company_id=${companyId}`),
       api.get<Category[]>("/categories"),
+      api.get<Region[]>("/regions"),
     ]);
     setEntities(le);
     setFinancials(fin);
     setTraffic(tr);
     setAssortment(assort);
     setCategories(cats);
+    setRegions(regs);
   }, []);
+
+  const loadOffers = useCallback(async (companyId: number) => {
+    const params = new URLSearchParams({ company_id: String(companyId), limit: String(offerPageSize), offset: String(offerPage * offerPageSize) });
+    if (offerRegionId) params.set("region_id", String(offerRegionId));
+    if (offerCategoryId) params.set("category_id", String(offerCategoryId));
+    if (offerUncategorized) params.set("uncategorized_only", "true");
+    const res = await api.get<OfferListResponse>(`/offers?${params}`);
+    setOffers(res.items);
+    setOffersTotal(res.total);
+  }, [offerPage, offerRegionId, offerCategoryId, offerUncategorized]);
 
   const loadAll = useCallback(async () => {
     const c = await loadCompany();
-    if (c) await loadDetails(c.id);
+    if (c) {
+      await loadDetails(c.id);
+      await loadOffers(c.id);
+    }
     setLoading(false);
-  }, [loadCompany, loadDetails]);
+  }, [loadCompany, loadDetails, loadOffers]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Reload offers when filters change
+  useEffect(() => {
+    if (company) loadOffers(company.id);
+  }, [company, offerPage, offerRegionId, offerCategoryId, offerUncategorized, loadOffers]);
+
   const reloadDetails = () => {
-    if (company) loadDetails(company.id);
+    if (company) {
+      loadDetails(company.id);
+      loadOffers(company.id);
+    }
   };
 
   const handleDeleteLE = async (id: number, name: string) => {
@@ -216,6 +278,26 @@ export default function CompanyDetailPage() {
         onEdit={(a) => { setEditAssortment(a); setAssortFormOpen(true); }}
       />
 
+      <OffersSection
+        offers={offers}
+        total={offersTotal}
+        regions={regions}
+        categories={categories}
+        companyId={company.id}
+        onAdd={() => { setEditOffer(null); setOfferFormOpen(true); }}
+        onEdit={(o) => { setEditOffer(o); setOfferFormOpen(true); }}
+        onReload={() => { if (company) loadOffers(company.id); }}
+        filterRegionId={offerRegionId}
+        onFilterRegion={setOfferRegionId}
+        filterCategoryId={offerCategoryId}
+        onFilterCategory={setOfferCategoryId}
+        uncategorizedOnly={offerUncategorized}
+        onUncategorizedOnly={setOfferUncategorized}
+        page={offerPage}
+        onPageChange={setOfferPage}
+        pageSize={offerPageSize}
+      />
+
       <CompanyForm
         open={editFormOpen}
         onClose={() => setEditFormOpen(false)}
@@ -255,6 +337,16 @@ export default function CompanyDetailPage() {
         categories={categories}
         editRecord={editAssortment}
         defaultCompanyId={company.id}
+      />
+
+      <OfferForm
+        open={offerFormOpen}
+        onClose={() => setOfferFormOpen(false)}
+        onSaved={() => { if (company) loadOffers(company.id); }}
+        companyId={company.id}
+        regions={regions}
+        categories={categories}
+        editRecord={editOffer}
       />
     </div>
   );
