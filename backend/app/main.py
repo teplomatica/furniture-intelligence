@@ -12,6 +12,7 @@ from app.api import (
     assortment, regions, offers, company_region_config,
 )
 from app.api import settings as settings_api
+from app.api import scrape_test
 
 
 async def create_superadmin():
@@ -59,6 +60,7 @@ app.include_router(regions.router)
 app.include_router(offers.router)
 app.include_router(settings_api.router)
 app.include_router(company_region_config.router)
+app.include_router(scrape_test.router)
 
 
 @app.get("/health")
