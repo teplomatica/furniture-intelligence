@@ -1,202 +1,128 @@
-"""Parse product offers from scraped markdown/HTML."""
+"""Parse product offers from scraped markdown using Claude API for extraction."""
 import re
+import json
 import logging
-from urllib.parse import urljoin, urlparse
+import httpx
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# --- Price patterns ---
-PRICE_PATTERN = re.compile(r'(\d{1,3}(?:[\s\u00a0]\d{3}){0,3})\s*[₽\u20BD]')
-STRIKETHROUGH_PRICE = re.compile(r'~~[^~]*?(\d{1,3}(?:[\s\u00a0]\d{3}){0,3})\s*[₽\u20BD][^~]*~~')
-
-MAX_REASONABLE_PRICE = 5_000_000  # max 5M rubles for furniture
-MIN_REASONABLE_PRICE = 500  # min 500 rubles
-
-# --- Product block patterns ---
-MD_LINK = re.compile(r'\[([^\]]{5,200})\]\(([^)]+)\)')
-MD_IMAGE = re.compile(r'!\[[^\]]*\]\(([^)]+\.(?:jpg|jpeg|png|webp|avif)[^)]*)\)', re.IGNORECASE)
-
-# --- Availability ---
-IN_STOCK = re.compile(r'[Вв]\s*наличии|в продаже|есть на складе', re.IGNORECASE)
-OUT_OF_STOCK = re.compile(r'[Нн]ет в наличии|под заказ|нет на складе|распродано', re.IGNORECASE)
-
-# --- SKU ---
-SKU_PATTERN = re.compile(r'(?:Артикул|Арт\.|SKU|Код товара)\s*:?\s*([A-Za-z0-9\-]{3,30})', re.IGNORECASE)
-
-# --- Pagination ---
+# --- Pagination detection (still regex, simple enough) ---
 NEXT_PAGE = re.compile(r'[?&]page=(\d+)')
 
-# Words that are colors/materials, NOT product names
-COLOR_WORDS = {
-    "бежевый", "белый", "серый", "черный", "чёрный", "синий", "зелёный", "зеленый",
-    "красный", "коричневый", "голубой", "розовый", "фиолетовый", "оранжевый",
-    "жёлтый", "желтый", "бирюзовый", "аквамарин", "светло-серый", "тёмно-серый",
-    "темно-серый", "светло-бежевый", "тёмно-коричневый", "темно-коричневый",
-    "графит", "антрацит", "слоновая кость", "мокко", "капучино", "шоколад",
-    "венге", "дуб", "бук", "орех", "ясень", "сонома",
+EXTRACTION_PROMPT = """Извлеки все товарные предложения (офферы) из этого каталога мебели.
+
+Верни ТОЛЬКО валидный JSON массив. Каждый элемент:
+{
+  "name": "полное название товара",
+  "url": "ссылка на товар (абсолютная или относительная)",
+  "price": цена в рублях (целое число) или null,
+  "price_old": старая/зачеркнутая цена или null,
+  "is_available": true/false/null (null если неизвестно),
+  "sku": "артикул/код товара" или null,
+  "image_url": "ссылка на изображение" или null
 }
 
-# Navigation words to skip
-SKIP_NAMES = {
-    "подробнее", "читать далее", "показать ещё", "загрузить", "смотреть все",
-    "войти", "регистрация", "корзина", "каталог", "все товары", "все категории",
-    "в корзину", "купить", "заказать", "добавить", "сравнить", "в избранное",
-    "доставка", "оплата", "гарантия", "о компании", "контакты",
-    "открыть", "закрыть", "назад", "вперёд", "далее",
-}
+Правила:
+- Извлекай ТОЛЬКО реальные товары (диваны, кровати, шкафы и т.д.)
+- НЕ включай: цвета, фильтры, навигацию, категории, баннеры, акции
+- Если один товар представлен в нескольких цветах — верни ОДИН оффер
+- Цена должна быть числом в рублях (например 24990 из "24 990 ₽")
+- Если цена указана как "от X ₽" — используй X
+- URL должен вести на страницу конкретного товара
+- Если данных о наличии нет — ставь null
 
-SKIP_URL_PARTS = [
-    '/login', '/cart', '/favorites', '/compare', '/search', '/delivery',
-    '/payment', '/about', '/contacts', '/stores', '/help',
-    'javascript:', 'mailto:', 'tel:', '#',
-]
+Верни [] если товаров не найдено. Без пояснений, только JSON."""
+
+# Max markdown to send to LLM (control cost)
+MAX_MARKDOWN_FOR_LLM = 30_000  # ~7.5K tokens
 
 
-def _parse_price(text: str) -> int | None:
-    """Extract integer price from text like '24 990' or '24990'."""
-    cleaned = re.sub(r'[\s\u00a0]', '', text)
+async def _extract_with_llm(markdown: str, base_url: str) -> list[dict]:
+    """Send markdown to Claude API and extract structured product data."""
+    if not settings.anthropic_api_key:
+        logger.warning("ANTHROPIC_API_KEY not set, falling back to empty results")
+        return []
+
+    # Truncate if too long
+    text = markdown[:MAX_MARKDOWN_FOR_LLM]
+
     try:
-        val = int(cleaned)
-        if MIN_REASONABLE_PRICE <= val <= MAX_REASONABLE_PRICE:
-            return val
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 4096,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": f"{EXTRACTION_PROMPT}\n\n---\n\nBase URL: {base_url}\n\n{text}",
+                        }
+                    ],
+                },
+            )
+            if r.status_code != 200:
+                logger.error(f"Claude API error {r.status_code}: {r.text[:500]}")
+                return []
+
+            data = r.json()
+            content = data.get("content", [{}])[0].get("text", "")
+
+            # Parse JSON from response (handle markdown code blocks)
+            content = content.strip()
+            if content.startswith("```"):
+                content = re.sub(r'^```(?:json)?\s*', '', content)
+                content = re.sub(r'\s*```$', '', content)
+
+            offers = json.loads(content)
+
+            if not isinstance(offers, list):
+                logger.error(f"Claude returned non-list: {type(offers)}")
+                return []
+
+            # Validate and clean
+            cleaned = []
+            for o in offers:
+                if not isinstance(o, dict) or not o.get("name"):
+                    continue
+                # Resolve relative URLs
+                url = o.get("url")
+                if url and url.startswith("/"):
+                    url = f"{base_url.rstrip('/')}{url}"
+                cleaned.append({
+                    "name": str(o.get("name", "")),
+                    "url": url,
+                    "price": _safe_int(o.get("price")),
+                    "price_old": _safe_int(o.get("price_old")),
+                    "is_available": o.get("is_available"),
+                    "sku": o.get("sku"),
+                    "image_url": o.get("image_url"),
+                    "characteristics": None,
+                })
+            return cleaned
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Claude response as JSON: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Claude API call failed: {e}")
+        return []
+
+
+def _safe_int(val) -> int | None:
+    if val is None:
         return None
-    except ValueError:
+    try:
+        v = int(val)
+        return v if 100 <= v <= 10_000_000 else None
+    except (ValueError, TypeError):
         return None
-
-
-def _is_color_or_skip(name: str) -> bool:
-    """Check if name is a color, material, or navigation word."""
-    name_lower = name.lower().strip()
-    if name_lower in COLOR_WORDS or name_lower in SKIP_NAMES:
-        return True
-    # Single word under 15 chars without spaces is likely a color/filter
-    if len(name_lower) < 15 and ' ' not in name_lower:
-        return True
-    return False
-
-
-def _is_product_url(url: str) -> bool:
-    """Check if URL looks like a product page (has enough path depth)."""
-    parsed = urlparse(url)
-    path = parsed.path.rstrip('/')
-    if not path:
-        return False
-    segments = [s for s in path.split('/') if s]
-    return len(segments) >= 2  # at least /category/product
-
-
-def _extract_domain(url: str) -> str:
-    parsed = urlparse(url)
-    return parsed.netloc.lower().replace("www.", "")
-
-
-def _deduplicate_by_name(offers: list[dict]) -> list[dict]:
-    """Keep one offer per product name (the one with the most data)."""
-    by_name: dict[str, dict] = {}
-    for o in offers:
-        name = o["name"].lower().strip()
-        existing = by_name.get(name)
-        if not existing:
-            by_name[name] = o
-        else:
-            # Keep the one with more data (price > no price, availability > none)
-            score_new = (1 if o.get("price") else 0) + (1 if o.get("is_available") is not None else 0) + (1 if o.get("sku") else 0)
-            score_old = (1 if existing.get("price") else 0) + (1 if existing.get("is_available") is not None else 0) + (1 if existing.get("sku") else 0)
-            if score_new > score_old:
-                by_name[name] = o
-    return list(by_name.values())
-
-
-def parse_offers_generic(markdown: str, base_url: str) -> list[dict]:
-    """Generic markdown parser: extract product blocks with name, price, url, image."""
-    offers = []
-    seen_urls = set()
-
-    for match in MD_LINK.finditer(markdown):
-        name = match.group(1).strip()
-        url = match.group(2).strip()
-
-        # Skip non-product links
-        if _is_color_or_skip(name):
-            continue
-        if any(skip in url.lower() for skip in SKIP_URL_PARTS):
-            continue
-
-        # Resolve relative URLs
-        if url.startswith('/'):
-            url = urljoin(base_url, url)
-
-        # Must look like a product URL
-        if not _is_product_url(url):
-            continue
-
-        # Deduplicate by URL
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
-
-        # Context after and before the link
-        start = match.end()
-        context = markdown[start:start + 400]
-        pre_context = markdown[max(0, match.start() - 200):match.start()]
-
-        # Extract price
-        price = None
-        price_old = None
-        strikethrough = STRIKETHROUGH_PRICE.search(context)
-        if strikethrough:
-            price_old = _parse_price(strikethrough.group(1))
-
-        price_match = PRICE_PATTERN.search(context)
-        if price_match:
-            price = _parse_price(price_match.group(1))
-            if price and price_old and price == price_old:
-                remaining = context[price_match.end():]
-                second = PRICE_PATTERN.search(remaining)
-                if second:
-                    price = _parse_price(second.group(1))
-
-        # Also check pre-context for price (some sites put price before link)
-        if not price:
-            price_match_pre = PRICE_PATTERN.search(pre_context)
-            if price_match_pre:
-                price = _parse_price(price_match_pre.group(1))
-
-        # Extract image
-        image_url = None
-        img_match = MD_IMAGE.search(pre_context) or MD_IMAGE.search(context)
-        if img_match:
-            img = img_match.group(1)
-            if img.startswith('/'):
-                img = urljoin(base_url, img)
-            image_url = img
-
-        # Extract availability
-        is_available = None
-        if IN_STOCK.search(context):
-            is_available = True
-        elif OUT_OF_STOCK.search(context):
-            is_available = False
-
-        # Extract SKU
-        sku = None
-        sku_match = SKU_PATTERN.search(context)
-        if sku_match:
-            sku = sku_match.group(1)
-
-        offers.append({
-            "name": name,
-            "url": url,
-            "price": price,
-            "price_old": price_old,
-            "is_available": is_available,
-            "image_url": image_url,
-            "sku": sku,
-            "characteristics": None,
-        })
-
-    # Deduplicate by product name (color variants → one entry)
-    return _deduplicate_by_name(offers)
 
 
 def detect_has_next_page(markdown: str, current_page: int) -> bool:
@@ -210,17 +136,6 @@ def detect_has_next_page(markdown: str, current_page: int) -> bool:
     return False
 
 
-# --- Site-specific parsers ---
-
-SITE_PARSERS: dict[str, callable] = {}
-
-
-def parse_offers(markdown: str, base_url: str) -> list[dict]:
-    """Dispatch to site-specific parser or fall back to generic."""
-    domain = _extract_domain(base_url)
-    parser = SITE_PARSERS.get(domain)
-    if parser:
-        result = parser(markdown, base_url)
-        if result:
-            return result
-    return parse_offers_generic(markdown, base_url)
+async def parse_offers(markdown: str, base_url: str) -> list[dict]:
+    """Extract product offers from markdown using LLM."""
+    return await _extract_with_llm(markdown, base_url)

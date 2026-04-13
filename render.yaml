@@ -16,6 +16,8 @@ services:
         sync: false
       - key: DATANEWTON_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: FRONTEND_URL
         value: https://furniture-intelligence-frontend.onrender.com
     healthCheckPath: /health

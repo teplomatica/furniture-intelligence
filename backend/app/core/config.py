@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     datanewton_api_key: Optional[str] = None
     datanewton_base_url: str = "https://api.datanewton.ru/v1"
     firecrawl_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
 
     @field_validator("database_url", mode="before")
     @classmethod

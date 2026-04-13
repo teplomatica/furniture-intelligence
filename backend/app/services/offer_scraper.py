@@ -148,7 +148,7 @@ async def scrape_offers_events(
                 # Parse
                 yield {"step": "parsing", "message": f"Извлечение товаров со стр. {page}..."}
                 base_url = f"https://{company.website}" if company.website else catalog_url
-                page_offers = parse_offers(text, base_url)
+                page_offers = await parse_offers(text, base_url)
 
                 if debug_mode and page_offers:
                     page_offers = page_offers[:debug_max_offers]

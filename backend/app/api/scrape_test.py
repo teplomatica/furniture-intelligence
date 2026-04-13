@@ -49,7 +49,7 @@ async def test_scrape(
         raise HTTPException(status_code=502, detail="Could not fetch URL via Firecrawl or HTTP")
 
     # Parse offers
-    offers = parse_offers(text, body.url)
+    offers = await parse_offers(text, body.url)
 
     return ScrapeTestResponse(
         url=body.url,
