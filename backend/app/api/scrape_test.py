@@ -23,7 +23,7 @@ class ScrapeTestResponse(BaseModel):
     url: str
     method: str
     markdown_length: int
-    markdown_preview: str  # first 3000 chars
+    markdown_preview: str  # first 5000 chars
     offers_found: int
     offers: list[dict]
 
@@ -55,7 +55,7 @@ async def test_scrape(
         url=body.url,
         method=method,
         markdown_length=len(text),
-        markdown_preview=text[:3000],
+        markdown_preview=text[:5000],
         offers_found=len(offers),
-        offers=offers[:20],  # max 20 for preview
+        offers=offers[:30],  # max 30 for preview
     )

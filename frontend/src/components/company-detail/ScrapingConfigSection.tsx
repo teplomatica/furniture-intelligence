@@ -193,7 +193,7 @@ export function ScrapingConfigSection({ configs, regions, companyId, onAdd, onEd
           {showMarkdown && (
             <pre className="text-xs text-gray-600 bg-white border rounded p-3 mb-3 max-h-64 overflow-auto whitespace-pre-wrap break-words">
               {testResult.markdown_preview}
-              {testResult.markdown_length > 3000 && "\n\n... (обрезано)"}
+              {testResult.markdown_length > 5000 && "\n\n... (обрезано)"}
             </pre>
           )}
 
