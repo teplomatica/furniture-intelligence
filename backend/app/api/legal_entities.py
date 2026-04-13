@@ -16,6 +16,7 @@ from app.models.legal_entity import LegalEntity
 from app.models.competitor_data import CompetitorFinancial, DataSource
 from app.services.datanewton import datanewton
 from app.services.legal_scraper import scrape_legal_info
+from app.services.refresh import discover_legal_entity_events, _sse
 
 logger = logging.getLogger(__name__)
 
@@ -147,109 +148,8 @@ async def discover_for_company(
     """Автопоиск юрлица через сайт + DataNewton. Стримит шаги через SSE."""
 
     async def event_stream():
-        def send(step: str, data: dict | None = None):
-            payload = {"step": step}
-            if data:
-                payload.update(data)
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        company = await db.get(Company, company_id)
-        if not company:
-            yield send("error", {"message": "Компания не найдена"})
-            return
-
-        existing = await db.execute(
-            select(LegalEntity).where(LegalEntity.company_id == company_id)
-        )
-        if existing.scalars().first():
-            yield send("skipped", {"message": "Юрлица уже есть"})
-            return
-
-        yield send("scraping", {"message": f"Парсим сайт {company.website}..."})
-
-        try:
-            scraped = await scrape_legal_info(company.website, db)
-
-            if scraped.inn or scraped.ogrn:
-                yield send("scraped", {
-                    "message": f"Найден ИНН: {scraped.inn or '—'}, ОГРН: {scraped.ogrn or '—'}",
-                    "source_url": scraped.source_url,
-                    "method": scraped.method,
-                    "api_calls": scraped.api_calls,
-                    "cache_hits": scraped.cache_hits,
-                })
-            else:
-                yield send("scraped", {
-                    "message": "ИНН/ОГРН не найдены на сайте, ищем по названию",
-                    "api_calls": scraped.api_calls,
-                    "cache_hits": scraped.cache_hits,
-                })
-
-            search_query = scraped.inn or scraped.ogrn
-            if not search_query and scraped.legal_names:
-                search_query = scraped.legal_names[0]
-            if not search_query:
-                search_query = company.name
-
-            yield send("searching", {"message": f"Ищем в DataNewton: {search_query}"})
-
-            dn_results = await datanewton.search_counterparty(search_query, limit=5)
-            if not dn_results:
-                yield send("not_found", {"message": "Не найдено в DataNewton"})
-                return
-
-            best = None
-            if scraped.inn:
-                for r in dn_results:
-                    if r.get("inn") == scraped.inn and r.get("active", False):
-                        best = r
-                        break
-            if not best:
-                for r in dn_results:
-                    if r.get("active", False):
-                        best = r
-                        break
-            if not best:
-                best = dn_results[0]
-
-            parsed = datanewton.parse_counterparty(best)
-
-            yield send("saving", {"message": f"Сохраняем: {parsed['legal_name']} (ИНН: {parsed['inn']})"})
-
-            dup_check = await db.execute(
-                select(LegalEntity).where(LegalEntity.company_id == company_id)
-            )
-            if dup_check.scalars().first():
-                yield send("skipped", {"message": "Юрлицо уже добавлено"})
-                return
-
-            le = LegalEntity(
-                company_id=company.id,
-                inn=parsed["inn"],
-                ogrn=parsed["ogrn"],
-                legal_name=parsed["legal_name"] or company.name,
-                address=parsed.get("address"),
-                region=parsed.get("region"),
-                manager_name=parsed.get("manager_name"),
-                activity_code=parsed.get("activity_code"),
-                activity_description=parsed.get("activity_description"),
-                founded_year=parsed.get("founded_year"),
-                datanewton_id=parsed.get("datanewton_id"),
-                raw_data=parsed.get("raw_data"),
-                is_primary=True,
-            )
-            db.add(le)
-            await db.commit()
-
-            yield send("done", {
-                "message": f"Найден: {parsed['legal_name']}",
-                "legal_name": parsed["legal_name"],
-                "inn": parsed["inn"],
-            })
-
-        except Exception as e:
-            logger.error(f"Discover error for {company.name}: {e}")
-            yield send("error", {"message": str(e)})
+        async for event in discover_legal_entity_events(company_id, db):
+            yield _sse(event)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

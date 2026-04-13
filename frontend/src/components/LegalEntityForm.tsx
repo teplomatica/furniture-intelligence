@@ -22,9 +22,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  companyId?: number;
 }
 
-export function LegalEntityForm({ open, onClose, onSaved }: Props) {
+export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompanyId }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState<number | "">("");
   const [inn, setInn] = useState("");
@@ -41,11 +42,16 @@ export function LegalEntityForm({ open, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (open) {
-      api.get<Company[]>("/companies").then(setCompanies);
-      setCompanyId(""); setInn(""); setOgrn(""); setLegalName("");
+      if (fixedCompanyId) {
+        setCompanyId(fixedCompanyId);
+      } else {
+        api.get<Company[]>("/companies").then(setCompanies);
+        setCompanyId("");
+      }
+      setInn(""); setOgrn(""); setLegalName("");
       setIsPrimary(false); setSearchQuery(""); setSearchResults([]); setError("");
     }
-  }, [open]);
+  }, [open, fixedCompanyId]);
 
   async function handleSearch() {
     if (!searchQuery.trim()) return;
@@ -132,7 +138,7 @@ export function LegalEntityForm({ open, onClose, onSaved }: Props) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Компания *</label>
           <select value={companyId} onChange={(e) => setCompanyId(e.target.value ? Number(e.target.value) : "")}
-            className="w-full px-3 py-2 border rounded-lg text-sm" required>
+            className="w-full px-3 py-2 border rounded-lg text-sm" required disabled={!!fixedCompanyId}>
             <option value="">— выберите —</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>

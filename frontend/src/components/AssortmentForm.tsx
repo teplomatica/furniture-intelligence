@@ -34,9 +34,10 @@ interface Props {
   companies: Company[];
   categories: Category[];
   editRecord?: Assortment | null;
+  defaultCompanyId?: number;
 }
 
-export function AssortmentForm({ open, onClose, onSaved, companies, categories, editRecord }: Props) {
+export function AssortmentForm({ open, onClose, onSaved, companies, categories, editRecord, defaultCompanyId }: Props) {
   const [companyId, setCompanyId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [skuCount, setSkuCount] = useState("");
@@ -57,7 +58,7 @@ export function AssortmentForm({ open, onClose, onSaved, companies, categories, 
       setPriceMax(editRecord.price_max != null ? String(editRecord.price_max) : "");
       setPriceMedian(editRecord.price_median != null ? String(editRecord.price_median) : "");
     } else {
-      setCompanyId(companies[0]?.id ? String(companies[0].id) : "");
+      setCompanyId(defaultCompanyId ? String(defaultCompanyId) : companies[0]?.id ? String(companies[0].id) : "");
       setCategoryId(categories[0]?.id ? String(categories[0].id) : "");
       setSkuCount(""); setAvailabilityPct(""); setPriceMin(""); setPriceMax(""); setPriceMedian("");
     }
@@ -106,7 +107,7 @@ export function AssortmentForm({ open, onClose, onSaved, companies, categories, 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Компания *</label>
             <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm" required disabled={!!editRecord}>
+              className="w-full px-3 py-2 border rounded-lg text-sm" required disabled={!!editRecord || !!defaultCompanyId}>
               <option value="">Выберите...</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>

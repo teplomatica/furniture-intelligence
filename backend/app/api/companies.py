@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -7,6 +8,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_editor
 from app.models.user import User
 from app.models.company import Company, SegmentGroup, Positioning
+from app.services.refresh import refresh_company_stream
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -55,6 +57,15 @@ async def list_companies(
     return result.scalars().all()
 
 
+@router.get("/by-slug/{slug}", response_model=CompanyOut)
+async def get_company_by_slug(slug: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    result = await db.execute(select(Company).where(Company.slug == slug))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return company
+
+
 @router.get("/{company_id}", response_model=CompanyOut)
 async def get_company(company_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     company = await db.get(Company, company_id)
@@ -96,3 +107,23 @@ async def delete_company(company_id: int, db: AsyncSession = Depends(get_db), _:
         raise HTTPException(status_code=404, detail="Company not found")
     company.is_active = False
     await db.commit()
+
+
+class RefreshRequest(BaseModel):
+    sections: list[str]  # ["legal_entities", "financials"]
+
+
+@router.post("/{company_id}/refresh")
+async def refresh_company(
+    company_id: int,
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return StreamingResponse(
+        refresh_company_stream(company_id, body.sections, db),
+        media_type="text/event-stream",
+    )

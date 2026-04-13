@@ -24,6 +24,7 @@ interface Props {
   onSaved: () => void;
   companies: Company[];
   editRecord?: Traffic | null;
+  defaultCompanyId?: number;
 }
 
 function defaultPeriod(): string {
@@ -32,7 +33,7 @@ function defaultPeriod(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function TrafficForm({ open, onClose, onSaved, companies, editRecord }: Props) {
+export function TrafficForm({ open, onClose, onSaved, companies, editRecord, defaultCompanyId }: Props) {
   const [companyId, setCompanyId] = useState("");
   const [period, setPeriod] = useState(defaultPeriod());
   const [monthlyVisits, setMonthlyVisits] = useState("");
@@ -51,7 +52,7 @@ export function TrafficForm({ open, onClose, onSaved, companies, editRecord }: P
       setAvgDuration(editRecord.avg_visit_duration_sec != null ? String(editRecord.avg_visit_duration_sec) : "");
       setPagesPerVisit(editRecord.pages_per_visit != null ? String(editRecord.pages_per_visit) : "");
     } else {
-      setCompanyId(companies[0]?.id ? String(companies[0].id) : "");
+      setCompanyId(defaultCompanyId ? String(defaultCompanyId) : companies[0]?.id ? String(companies[0].id) : "");
       setPeriod(defaultPeriod());
       setMonthlyVisits(""); setBounceRate(""); setAvgDuration(""); setPagesPerVisit("");
     }
@@ -94,7 +95,7 @@ export function TrafficForm({ open, onClose, onSaved, companies, editRecord }: P
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Компания *</label>
             <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm" required disabled={!!editRecord}>
+              className="w-full px-3 py-2 border rounded-lg text-sm" required disabled={!!editRecord || !!defaultCompanyId}>
               <option value="">Выберите...</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>

@@ -6,10 +6,6 @@ import { api } from "@/lib/api";
 const NAV = [
   { href: "/companies", label: "Конкуренты" },
   { href: "/categories", label: "Категории" },
-  { href: "/legal-entities", label: "Юрлица" },
-  { href: "/financials", label: "Финансы" },
-  { href: "/traffic", label: "Трафик" },
-  { href: "/assortment", label: "Ассортимент" },
 ];
 
 export function Sidebar() {

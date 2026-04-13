@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { CompanyForm } from "@/components/CompanyForm";
 
@@ -27,19 +28,73 @@ interface Company {
   is_active: boolean;
 }
 
+interface CountItem {
+  company_id?: number;
+  legal_entity_id?: number;
+  id: number;
+}
+
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
+  const [leCounts, setLeCounts] = useState<Record<number, number>>({});
+  const [finCounts, setFinCounts] = useState<Record<number, number>>({});
+  const [trafficCounts, setTrafficCounts] = useState<Record<number, number>>({});
+  const [assortCounts, setAssortCounts] = useState<Record<number, number>>({});
 
-  const loadCompanies = useCallback(() => {
-    api.get<Company[]>("/companies?active_only=false")
-      .then(setCompanies)
+  const loadData = useCallback(() => {
+    Promise.all([
+      api.get<Company[]>("/companies?active_only=false"),
+      api.get<CountItem[]>("/legal-entities"),
+      api.get<CountItem[]>("/financials"),
+      api.get<CountItem[]>("/traffic"),
+      api.get<CountItem[]>("/assortment"),
+    ])
+      .then(([companies, les, fins, traffic, assort]) => {
+        setCompanies(companies);
+
+        // Count legal entities per company
+        const leMap: Record<number, number> = {};
+        for (const le of les) {
+          const cid = (le as any).company_id;
+          leMap[cid] = (leMap[cid] || 0) + 1;
+        }
+        setLeCounts(leMap);
+
+        // Count financials per company (via legal_entity → company mapping)
+        const leToCompany: Record<number, number> = {};
+        for (const le of les) {
+          leToCompany[(le as any).id] = (le as any).company_id;
+        }
+        const finMap: Record<number, number> = {};
+        for (const f of fins) {
+          const cid = leToCompany[(f as any).legal_entity_id];
+          if (cid) finMap[cid] = (finMap[cid] || 0) + 1;
+        }
+        setFinCounts(finMap);
+
+        // Count traffic per company
+        const trMap: Record<number, number> = {};
+        for (const t of traffic) {
+          const cid = (t as any).company_id;
+          trMap[cid] = (trMap[cid] || 0) + 1;
+        }
+        setTrafficCounts(trMap);
+
+        // Count assortment per company
+        const aMap: Record<number, number> = {};
+        for (const a of assort) {
+          const cid = (a as any).company_id;
+          aMap[cid] = (aMap[cid] || 0) + 1;
+        }
+        setAssortCounts(aMap);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { loadCompanies(); }, [loadCompanies]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const grouped = companies.reduce<Record<string, Company[]>>((acc, c) => {
     (acc[c.segment_group] ||= []).push(c);
@@ -75,17 +130,21 @@ export default function CompaniesPage() {
                       <th className="text-left px-4 py-2">Компания</th>
                       <th className="text-left px-4 py-2">Сайт</th>
                       <th className="text-left px-4 py-2">Позиционирование</th>
-                      <th className="text-left px-4 py-2">Заметки</th>
+                      <th className="text-left px-4 py-2">Данные</th>
                       <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((c) => (
                       <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium">{c.name}</td>
+                        <td className="px-4 py-2">
+                          <Link href={`/companies/${c.slug}`} className="font-medium text-blue-600 hover:underline">
+                            {c.name}
+                          </Link>
+                        </td>
                         <td className="px-4 py-2">
                           {c.website ? (
-                            <a href={`https://${c.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                            <a href={`https://${c.website}`} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:underline">
                               {c.website}
                             </a>
                           ) : "—"}
@@ -93,13 +152,28 @@ export default function CompaniesPage() {
                         <td className="px-4 py-2">
                           {c.positioning ? POSITIONING_LABELS[c.positioning] : "—"}
                         </td>
-                        <td className="px-4 py-2 text-gray-500">{c.notes || "—"}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-2 text-xs">
+                            <span className={`px-1.5 py-0.5 rounded ${(leCounts[c.id] || 0) > 0 ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-400"}`}>
+                              {leCounts[c.id] || 0} ЮЛ
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded ${(finCounts[c.id] || 0) > 0 ? "bg-purple-50 text-purple-600" : "bg-gray-100 text-gray-400"}`}>
+                              {finCounts[c.id] || 0} фин
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded ${(trafficCounts[c.id] || 0) > 0 ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-400"}`}>
+                              {trafficCounts[c.id] || 0} трафик
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded ${(assortCounts[c.id] || 0) > 0 ? "bg-orange-50 text-orange-600" : "bg-gray-100 text-gray-400"}`}>
+                              {assortCounts[c.id] || 0} ассорт
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-2 py-2">
                           <button
-                            onClick={() => { setEditCompany(c); setFormOpen(true); }}
+                            onClick={(e) => { e.stopPropagation(); setEditCompany(c); setFormOpen(true); }}
                             className="text-gray-400 hover:text-blue-600 text-sm"
                           >
-                            ✎
+                            &#9998;
                           </button>
                         </td>
                       </tr>
@@ -115,7 +189,7 @@ export default function CompaniesPage() {
       <CompanyForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSaved={loadCompanies}
+        onSaved={loadData}
         editCompany={editCompany}
       />
     </div>
