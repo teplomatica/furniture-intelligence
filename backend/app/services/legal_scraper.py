@@ -11,18 +11,26 @@ from app.services.scrape_utils import (
 
 logger = logging.getLogger(__name__)
 
-# Приоритетные страницы (сокращённый список — самые вероятные)
+# Страницы с юридической информацией (приоритет: документы → контакты → главная)
 LEGAL_PATHS = [
     "/oferta",
+    "/public-offer",
     "/privacy",
+    "/privacy-policy",
+    "/politika-konfidencialnosti",
     "/legal",
+    "/pravovaya-informaciya",
+    "/terms",
     "/contacts",
+    "/kontakty",
     "/about",
+    "/o-kompanii",
     "/",
 ]
 
-INN_PATTERN = re.compile(r"(?:ИНН|INN)\s*:?\s*(\d{10,12})")
-OGRN_PATTERN = re.compile(r"(?:ОГРН|OGRN)\s*:?\s*(\d{13,15})")
+# Regex устойчивый к markdown: **ИНН** 123, *ИНН*: 123, ИНН\n123
+INN_PATTERN = re.compile(r"(?:\*{0,2})(?:ИНН|INN)(?:\*{0,2})\s*:?\s*(\d{10,12})")
+OGRN_PATTERN = re.compile(r"(?:\*{0,2})(?:ОГРН|OGRN)(?:\*{0,2})\s*:?\s*(\d{13,15})")
 LEGAL_NAME_PATTERN = re.compile(
     r'((?:ООО|ОАО|ПАО|АО|ЗАО|ИП)\s*[«"\u00ab\u201c]([^»"\u00bb\u201d]{3,60})[»"\u00bb\u201d])',
     re.IGNORECASE,
