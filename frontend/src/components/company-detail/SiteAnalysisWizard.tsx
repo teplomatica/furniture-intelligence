@@ -55,6 +55,7 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
   // Mapping state
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [categoryMappings, setCategoryMappings] = useState<Record<string, number>>({});
+  const [urlNames, setUrlNames] = useState<Record<string, string>>({});
   const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set());
   const [cityRegionMappings, setCityRegionMappings] = useState<Record<string, number>>({});
 
@@ -77,20 +78,24 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
         // Pre-select all URLs and auto-mappings
         const urls = new Set<string>();
         const mappings: Record<string, number> = {};
+        const names: Record<string, string> = {};
         for (const cat of cats) {
           if (cat.site_url) {
             urls.add(cat.site_url);
+            names[cat.site_url] = cat.site_name;
             if (cat.our_category) mappings[cat.site_url] = cat.our_category.id;
           }
           for (const sub of cat.subcategories || []) {
             if (sub.site_url) {
               urls.add(sub.site_url);
+              names[sub.site_url] = sub.site_name;
               if (sub.our_category) mappings[sub.site_url] = sub.our_category.id;
             }
           }
         }
         setSelectedUrls(urls);
         setCategoryMappings(mappings);
+        setUrlNames(names);
       }
 
       if (event.step === "regions_done" && event.regions) {
@@ -126,6 +131,7 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
 
     const catMappings = Array.from(selectedUrls).map((url) => ({
       site_url: url,
+      site_name: urlNames[url] || null,
       our_category_id: categoryMappings[url] || null,
     }));
 

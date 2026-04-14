@@ -54,6 +54,8 @@ export function ScrapeConfigPanel({
 }: Props) {
   const [tab, setTab] = useState<Tab>("categories");
   const [saving, setSaving] = useState(false);
+  const [editingCat, setEditingCat] = useState<number | null>(null);
+  const [editingReg, setEditingReg] = useState<number | null>(null);
 
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const regById = Object.fromEntries(regions.map((r) => [r.id, r]));
@@ -69,8 +71,20 @@ export function ScrapeConfigPanel({
     onReload();
   };
 
+  const handleUpdateCatMapping = async (id: number, field: string, value: any) => {
+    await api.patch(`/company-category-mappings/${id}`, { [field]: value });
+    setEditingCat(null);
+    onReload();
+  };
+
   const handleDeleteRegMapping = async (id: number) => {
     await api.delete(`/company-region-mappings/${id}`);
+    onReload();
+  };
+
+  const handleUpdateRegMapping = async (id: number, field: string, value: any) => {
+    await api.patch(`/company-region-mappings/${id}`, { [field]: value });
+    setEditingReg(null);
     onReload();
   };
 
@@ -149,9 +163,30 @@ export function ScrapeConfigPanel({
               <tbody>
                 {categoryMappings.map((m) => (
                   <tr key={m.id} className="border-t border-gray-50 hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium">{catById[m.category_id]?.name ?? `#${m.category_id}`}</td>
-                    <td className="px-3 py-2 text-gray-500">{m.retailer_name || "\u2014"}</td>
-                    <td className="px-3 py-2 text-xs text-gray-400 max-w-[250px] truncate font-mono">{m.retailer_url}</td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={m.category_id}
+                        onChange={(e) => handleUpdateCatMapping(m.id, "category_id", Number(e.target.value))}
+                        className="px-1 py-0.5 border rounded text-sm w-full"
+                      >
+                        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        defaultValue={m.retailer_name || ""}
+                        onBlur={(e) => { if (e.target.value !== (m.retailer_name || "")) handleUpdateCatMapping(m.id, "retailer_name", e.target.value); }}
+                        className="px-1 py-0.5 border rounded text-sm w-full text-gray-600"
+                        placeholder="Название на сайте"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        defaultValue={m.retailer_url}
+                        onBlur={(e) => { if (e.target.value !== m.retailer_url) handleUpdateCatMapping(m.id, "retailer_url", e.target.value); }}
+                        className="px-1 py-0.5 border rounded text-xs w-full font-mono text-gray-500"
+                      />
+                    </td>
                     <td className="px-2 py-2">
                       <button onClick={() => handleDeleteCatMapping(m.id)} className="text-gray-300 hover:text-red-500">&times;</button>
                     </td>
@@ -185,9 +220,34 @@ export function ScrapeConfigPanel({
                 {regionMappings.map((m) => (
                   <tr key={m.id} className="border-t border-gray-50 hover:bg-gray-50">
                     <td className="px-3 py-2 font-medium">{regById[m.region_id]?.name ?? `#${m.region_id}`}</td>
-                    <td className="px-3 py-2 text-xs">{METHOD_LABELS[m.region_method] || m.region_method}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-gray-500">{m.region_key || "\u2014"}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-gray-500">{m.region_value || "\u2014"}</td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={m.region_method}
+                        onChange={(e) => handleUpdateRegMapping(m.id, "region_method", e.target.value)}
+                        className="px-1 py-0.5 border rounded text-xs"
+                      >
+                        <option value="cookie">{"Cookie"}</option>
+                        <option value="url_param">{"URL param"}</option>
+                        <option value="header">{"Header"}</option>
+                        <option value="none">{"Нет"}</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        defaultValue={m.region_key || ""}
+                        onBlur={(e) => { if (e.target.value !== (m.region_key || "")) handleUpdateRegMapping(m.id, "region_key", e.target.value); }}
+                        className="px-1 py-0.5 border rounded text-xs font-mono w-full"
+                        placeholder="city_id"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        defaultValue={m.region_value || ""}
+                        onBlur={(e) => { if (e.target.value !== (m.region_value || "")) handleUpdateRegMapping(m.id, "region_value", e.target.value); }}
+                        className="px-1 py-0.5 border rounded text-xs font-mono w-full"
+                        placeholder="moscow"
+                      />
+                    </td>
                     <td className="px-2 py-2">
                       <button onClick={() => handleDeleteRegMapping(m.id)} className="text-gray-300 hover:text-red-500">&times;</button>
                     </td>

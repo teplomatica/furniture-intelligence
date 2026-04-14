@@ -113,6 +113,29 @@ async def create_category_mapping(
     return mapping
 
 
+class CategoryMappingUpdate(BaseModel):
+    category_id: Optional[int] = None
+    retailer_name: Optional[str] = None
+    retailer_url: Optional[str] = None
+
+
+@router.patch("/company-category-mappings/{mapping_id}", response_model=CategoryMappingOut)
+async def update_category_mapping(
+    mapping_id: int,
+    body: CategoryMappingUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    mapping = await db.get(CompanyCategoryMapping, mapping_id)
+    if not mapping:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(mapping, field, value)
+    await db.commit()
+    await db.refresh(mapping)
+    return mapping
+
+
 @router.delete("/company-category-mappings/{mapping_id}", status_code=204)
 async def delete_category_mapping(
     mapping_id: int,
