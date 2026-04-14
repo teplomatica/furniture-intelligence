@@ -205,32 +205,54 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
             {/* Categories */}
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                Категории ({selectedUrls.size} выбрано)
+                {"Категории (" + selectedUrls.size + " выбрано)"}
               </h3>
-              <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
-                {siteCategories.flatMap((cat) => {
-                  const items = [{ name: cat.site_name, url: cat.site_url, match: cat.our_category, level: 0 }];
-                  for (const sub of cat.subcategories || []) {
-                    items.push({ name: sub.site_name, url: sub.site_url, match: sub.our_category, level: 1 });
-                  }
-                  return items;
-                }).filter((item) => item.url).map((item) => (
-                  <div key={item.url} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50">
-                    <input type="checkbox" checked={selectedUrls.has(item.url)} onChange={() => toggleUrl(item.url)} />
-                    <span className={`flex-1 ${item.level > 0 ? "pl-4 text-gray-500" : "font-medium"}`}>
-                      {item.name}
-                    </span>
-                    <select
-                      value={categoryMappings[item.url] || ""}
-                      onChange={(e) => setCategoryMappings((prev) => ({ ...prev, [item.url]: Number(e.target.value) }))}
-                      className="px-1 py-0.5 border rounded text-xs w-36"
-                    >
-                      <option value="">--</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <span className="text-gray-400 text-[10px] max-w-[120px] truncate">{item.url}</span>
-                  </div>
-                ))}
+              <div className="border rounded-lg max-h-48 overflow-y-auto">
+                {/* Select all header */}
+                <div className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-50 border-b sticky top-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedUrls.size === siteCategories.flatMap((c) => [c, ...(c.subcategories || [])]).filter((i) => i.site_url).length && selectedUrls.size > 0}
+                    onChange={() => {
+                      const allUrls = siteCategories.flatMap((c) => {
+                        const urls = c.site_url ? [c.site_url] : [];
+                        for (const s of c.subcategories || []) { if (s.site_url) urls.push(s.site_url); }
+                        return urls;
+                      });
+                      if (selectedUrls.size === allUrls.length) {
+                        setSelectedUrls(new Set());
+                      } else {
+                        setSelectedUrls(new Set(allUrls));
+                      }
+                    }}
+                  />
+                  <span className="flex-1 font-medium text-gray-500">{"Выбрать все"}</span>
+                  <span className="text-gray-400 w-36 text-center">{"Наша категория"}</span>
+                  <span className="text-gray-400 w-[120px] text-center">{"URL"}</span>
+                </div>
+                <div className="divide-y">
+                  {siteCategories.flatMap((cat) => {
+                    const items = [{ name: cat.site_name, url: cat.site_url, match: cat.our_category }];
+                    for (const sub of cat.subcategories || []) {
+                      items.push({ name: sub.site_name, url: sub.site_url, match: sub.our_category });
+                    }
+                    return items;
+                  }).filter((item) => item.url).map((item) => (
+                    <div key={item.url} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50">
+                      <input type="checkbox" checked={selectedUrls.has(item.url)} onChange={() => toggleUrl(item.url)} />
+                      <span className="flex-1 font-medium">{item.name}</span>
+                      <select
+                        value={categoryMappings[item.url] || ""}
+                        onChange={(e) => setCategoryMappings((prev) => ({ ...prev, [item.url]: Number(e.target.value) }))}
+                        className="px-1 py-0.5 border rounded text-xs w-36"
+                      >
+                        <option value="">{"--"}</option>
+                        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <span className="text-gray-400 text-[10px] w-[120px] truncate text-right">{item.url}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -241,7 +263,7 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
                   Регионы
                   {siteRegions.has_region_selector ? (
                     <span className="ml-2 text-xs font-normal text-gray-400">
-                      метод: {siteRegions.method}, ключ: {siteRegions.key || "\u2014"}
+                      {"метод: " + siteRegions.method + ", ключ: " + (siteRegions.key || "\u2014")}
                     </span>
                   ) : (
                     <span className="ml-2 text-xs font-normal text-orange-500">выбор региона не обнаружен</span>
@@ -251,22 +273,42 @@ export function SiteAnalysisWizard({ open, onClose, companyId, regions, categori
                   <p className="text-xs text-gray-400 mb-2">{siteRegions.notes}</p>
                 )}
                 {siteRegions.cities.length > 0 ? (
-                  <div className="border rounded-lg divide-y max-h-36 overflow-y-auto">
-                    {siteRegions.cities.map((city) => (
-                      <div key={city.site_value} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50">
-                        <input type="checkbox" checked={selectedCities.has(city.site_value)} onChange={() => toggleCity(city.site_value)} />
-                        <span className="flex-1 font-medium">{city.site_name}</span>
-                        <span className="text-gray-400 font-mono">{city.site_value}</span>
-                        <select
-                          value={cityRegionMappings[city.site_value] || ""}
-                          onChange={(e) => setCityRegionMappings((prev) => ({ ...prev, [city.site_value]: Number(e.target.value) }))}
-                          className="px-1 py-0.5 border rounded text-xs w-36"
-                        >
-                          <option value="">--</option>
-                          {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                        </select>
-                      </div>
-                    ))}
+                  <div className="border rounded-lg max-h-36 overflow-y-auto">
+                    {/* Select all header */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-50 border-b sticky top-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedCities.size === siteRegions.cities.length && selectedCities.size > 0}
+                        onChange={() => {
+                          const allValues = siteRegions.cities.map((c) => c.site_value);
+                          if (selectedCities.size === allValues.length) {
+                            setSelectedCities(new Set());
+                          } else {
+                            setSelectedCities(new Set(allValues));
+                          }
+                        }}
+                      />
+                      <span className="flex-1 font-medium text-gray-500">{"Выбрать все"}</span>
+                      <span className="text-gray-400 w-20 text-center">{"Значение"}</span>
+                      <span className="text-gray-400 w-36 text-center">{"Наш регион"}</span>
+                    </div>
+                    <div className="divide-y">
+                      {siteRegions.cities.map((city) => (
+                        <div key={city.site_value} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50">
+                          <input type="checkbox" checked={selectedCities.has(city.site_value)} onChange={() => toggleCity(city.site_value)} />
+                          <span className="flex-1 font-medium">{city.site_name}</span>
+                          <span className="text-gray-400 font-mono w-20 text-center">{city.site_value}</span>
+                          <select
+                            value={cityRegionMappings[city.site_value] || ""}
+                            onChange={(e) => setCityRegionMappings((prev) => ({ ...prev, [city.site_value]: Number(e.target.value) }))}
+                            className="px-1 py-0.5 border rounded text-xs w-36"
+                          >
+                            <option value="">{"--"}</option>
+                            {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">Города не найдены. Конфиг будет создан без региона.</p>
