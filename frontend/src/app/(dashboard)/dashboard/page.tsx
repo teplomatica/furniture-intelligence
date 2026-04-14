@@ -122,20 +122,25 @@ export default function DashboardPage() {
                     const yoyStr = formatYoY(yoy);
                     const absStr = formatValue(val);
 
+                    const hasValue = val != null;
+                    const hasYoY = yoy !== null;
+
                     return (
-                      <td key={y} className="px-3 py-1.5 text-right">
-                        {yoyStr ? (
+                      <td key={y} className="px-3 py-1.5 text-right align-middle" style={{ minWidth: 80 }}>
+                        {hasYoY ? (
                           <>
-                            <div className={`text-sm font-semibold ${yoy !== null && yoy >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            <div className={`text-sm font-semibold leading-tight ${yoy >= 0 ? "text-green-600" : "text-red-500"}`}>
                               {yoyStr}
                             </div>
-                            <div className="text-[11px] text-gray-400 font-mono">{absStr}</div>
+                            <div className="text-[11px] text-gray-400 font-mono leading-tight">{absStr}</div>
+                          </>
+                        ) : hasValue ? (
+                          <>
+                            <div className="text-sm font-mono text-gray-700 leading-tight">{absStr}</div>
+                            <div className="text-[11px] text-gray-300 leading-tight">{"\u00A0"}</div>
                           </>
                         ) : (
-                          <>
-                            <div className="text-sm font-mono text-gray-700">{absStr}</div>
-                            <div className="text-[11px] text-gray-300">{"\u00A0"}</div>
-                          </>
+                          <div className="text-sm text-gray-300">{"\u2014"}</div>
                         )}
                       </td>
                     );
