@@ -9,7 +9,7 @@ import { FinancialsSection } from "@/components/company-detail/FinancialsSection
 import { TrafficSection } from "@/components/company-detail/TrafficSection";
 import { AssortmentSection } from "@/components/company-detail/AssortmentSection";
 import { OffersSection } from "@/components/company-detail/OffersSection";
-import { ScrapingConfigSection } from "@/components/company-detail/ScrapingConfigSection";
+import { ScrapeConfigPanel } from "@/components/company-detail/ScrapeConfigPanel";
 import { RefreshPanel } from "@/components/company-detail/RefreshPanel";
 import { CompanyForm } from "@/components/CompanyForm";
 import { LegalEntityForm } from "@/components/LegalEntityForm";
@@ -17,7 +17,7 @@ import { FinancialForm } from "@/components/FinancialForm";
 import { TrafficForm } from "@/components/TrafficForm";
 import { AssortmentForm } from "@/components/AssortmentForm";
 import { OfferForm } from "@/components/OfferForm";
-import { ScrapingConfigForm } from "@/components/ScrapingConfigForm";
+// ScrapingConfigForm removed — replaced by ScrapeConfigPanel
 import { SiteAnalysisWizard } from "@/components/company-detail/SiteAnalysisWizard";
 
 interface Company {
@@ -146,10 +146,10 @@ export default function CompanyDetailPage() {
   const [trafficFormOpen, setTrafficFormOpen] = useState(false);
   const [assortFormOpen, setAssortFormOpen] = useState(false);
   const [offerFormOpen, setOfferFormOpen] = useState(false);
-  const [configFormOpen, setConfigFormOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [scrapingConfigs, setScrapingConfigs] = useState<any[]>([]);
-  const [editConfig, setEditConfig] = useState<any | null>(null);
+  const [categoryMappings, setCategoryMappings] = useState<any[]>([]);
+  const [regionMappings, setRegionMappings] = useState<any[]>([]);
+  const [scrapeMatrix, setScrapeMatrix] = useState<any[]>([]);
   const [editFinancial, setEditFinancial] = useState<Financial | null>(null);
   const [editTraffic, setEditTraffic] = useState<Traffic | null>(null);
   const [editAssortment, setEditAssortment] = useState<Assortment | null>(null);
@@ -167,14 +167,16 @@ export default function CompanyDetailPage() {
   }, [slug]);
 
   const loadDetails = useCallback(async (companyId: number) => {
-    const [le, fin, tr, assort, cats, regs, configs] = await Promise.all([
+    const [le, fin, tr, assort, cats, regs, catMaps, regMaps, matrixData] = await Promise.all([
       api.get<LegalEntity[]>(`/legal-entities?company_id=${companyId}`),
       api.get<Financial[]>(`/financials?company_id=${companyId}`),
       api.get<Traffic[]>(`/traffic?company_id=${companyId}`),
       api.get<Assortment[]>(`/assortment?company_id=${companyId}`),
       api.get<Category[]>("/categories"),
       api.get<Region[]>("/regions"),
-      api.get<any[]>(`/company-region-configs?company_id=${companyId}`),
+      api.get<any[]>(`/companies/${companyId}/category-mappings`),
+      api.get<any[]>(`/companies/${companyId}/region-mappings`),
+      api.get<any[]>(`/companies/${companyId}/scrape-matrix`),
     ]);
     setEntities(le);
     setFinancials(fin);
@@ -182,7 +184,9 @@ export default function CompanyDetailPage() {
     setAssortment(assort);
     setCategories(cats);
     setRegions(regs);
-    setScrapingConfigs(configs);
+    setCategoryMappings(catMaps);
+    setRegionMappings(regMaps);
+    setScrapeMatrix(matrixData);
   }, []);
 
   const loadOffers = useCallback(async (companyId: number) => {
@@ -257,7 +261,7 @@ export default function CompanyDetailPage() {
           companyId={company.id}
           hasLegalEntities={hasLegalEntities}
           hasOgrn={hasOgrn}
-          hasScrapingConfig={scrapingConfigs.length > 0}
+          hasScrapingConfig={scrapeMatrix.filter((m: any) => m.enabled).length > 0}
           regions={regions}
           onClose={() => setRefreshOpen(false)}
           onComplete={reloadDetails}
@@ -290,12 +294,13 @@ export default function CompanyDetailPage() {
         onEdit={(a) => { setEditAssortment(a); setAssortFormOpen(true); }}
       />
 
-      <ScrapingConfigSection
-        configs={scrapingConfigs}
-        regions={regions}
+      <ScrapeConfigPanel
         companyId={company.id}
-        onAdd={() => { setEditConfig(null); setConfigFormOpen(true); }}
-        onEdit={(c) => { setEditConfig(c); setConfigFormOpen(true); }}
+        categories={categories}
+        regions={regions}
+        categoryMappings={categoryMappings}
+        regionMappings={regionMappings}
+        matrix={scrapeMatrix}
         onReload={reloadDetails}
         onAnalyze={() => setWizardOpen(true)}
       />
@@ -369,15 +374,6 @@ export default function CompanyDetailPage() {
         regions={regions}
         categories={categories}
         editRecord={editOffer}
-      />
-
-      <ScrapingConfigForm
-        open={configFormOpen}
-        onClose={() => setConfigFormOpen(false)}
-        onSaved={reloadDetails}
-        companyId={company.id}
-        regions={regions}
-        editConfig={editConfig}
       />
 
       <SiteAnalysisWizard

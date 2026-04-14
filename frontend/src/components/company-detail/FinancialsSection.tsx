@@ -96,9 +96,11 @@ export function FinancialsSection({ entities, financials, onAdd, onEdit }: Props
                           </span>
                         </td>
                         <td className="px-2 py-2">
-                          <button onClick={() => onEdit(f)} className="text-gray-400 hover:text-blue-600 text-sm">
-                            &#9998;
-                          </button>
+                          {f.source !== "datanewton" && (
+                            <button onClick={() => onEdit(f)} className="text-gray-400 hover:text-blue-600 text-sm">
+                              &#9998;
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

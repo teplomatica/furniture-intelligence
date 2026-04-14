@@ -73,7 +73,7 @@ def _extract_from_text(text: str, result: ScrapedLegalInfo) -> None:
                 break
 
 
-async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> ScrapedLegalInfo:
+async def scrape_legal_info(website: str, db: AsyncSession | None = None, skip_cache: bool = False) -> ScrapedLegalInfo:
     """Парсит сайт конкурента в поисках ИНН, ОГРН, юр. названия. Кеширует результат."""
     if not website:
         return ScrapedLegalInfo()
@@ -87,7 +87,7 @@ async def scrape_legal_info(website: str, db: AsyncSession | None = None) -> Scr
 
         # 1. Проверяем кеш
         text = None
-        if db:
+        if db and not skip_cache:
             text = await get_cached(db, url)
             if text:
                 result.cache_hits += 1

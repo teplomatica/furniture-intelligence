@@ -32,4 +32,4 @@ class LegalEntity(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     company: Mapped["Company"] = relationship("Company", back_populates="legal_entities")
-    financials: Mapped[list["CompetitorFinancial"]] = relationship("CompetitorFinancial", back_populates="legal_entity")
+    financials: Mapped[list["CompetitorFinancial"]] = relationship("CompetitorFinancial", back_populates="legal_entity", cascade="all, delete-orphan")
