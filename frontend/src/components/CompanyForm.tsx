@@ -22,9 +22,11 @@ interface Company {
   name: string;
   slug: string;
   website: string | null;
+  websites: string[] | null;
   segment_group: string;
   positioning: string | null;
   notes: string | null;
+  is_self?: boolean;
 }
 
 interface Props {
@@ -42,6 +44,7 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [website, setWebsite] = useState("");
+  const [extraWebsites, setExtraWebsites] = useState<string[]>([]);
   const [segmentGroup, setSegmentGroup] = useState("federal");
   const [positioning, setPositioning] = useState("");
   const [notes, setNotes] = useState("");
@@ -53,11 +56,12 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
       setName(editCompany.name);
       setSlug(editCompany.slug);
       setWebsite(editCompany.website || "");
+      setExtraWebsites(editCompany.websites || []);
       setSegmentGroup(editCompany.segment_group);
       setPositioning(editCompany.positioning || "");
       setNotes(editCompany.notes || "");
     } else {
-      setName(""); setSlug(""); setWebsite("");
+      setName(""); setSlug(""); setWebsite(""); setExtraWebsites([]);
       setSegmentGroup("federal"); setPositioning(""); setNotes("");
     }
     setError("");
@@ -67,10 +71,12 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
     e.preventDefault();
     setSaving(true);
     setError("");
+    const allWebsites = extraWebsites.filter((w) => w.trim());
     const body = {
       name,
       slug: slug || slugify(name),
       website: website || null,
+      websites: allWebsites.length > 0 ? allWebsites : null,
       segment_group: segmentGroup,
       positioning: positioning || null,
       notes: notes || null,
@@ -105,9 +111,26 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
             className="w-full px-3 py-2 border rounded-lg text-sm font-mono" placeholder="auto-generated" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Сайт</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{"Основной сайт"}</label>
           <input value={website} onChange={(e) => setWebsite(e.target.value)}
             className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="example.ru" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{"Дополнительные сайты"}</label>
+          {extraWebsites.map((w, i) => (
+            <div key={i} className="flex gap-1 mb-1">
+              <input
+                value={w}
+                onChange={(e) => { const arr = [...extraWebsites]; arr[i] = e.target.value; setExtraWebsites(arr); }}
+                className="flex-1 px-3 py-1.5 border rounded-lg text-sm"
+                placeholder="other-site.ru"
+              />
+              <button type="button" onClick={() => setExtraWebsites(extraWebsites.filter((_, j) => j !== i))}
+                className="text-gray-300 hover:text-red-500 px-1">&times;</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setExtraWebsites([...extraWebsites, ""])}
+            className="text-xs text-blue-600 hover:text-blue-800">{"+ Добавить сайт"}</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

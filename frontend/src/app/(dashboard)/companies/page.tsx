@@ -22,6 +22,7 @@ interface Company {
   name: string;
   slug: string;
   website: string | null;
+  websites: string[] | null;
   segment_group: string;
   positioning: string | null;
   notes: string | null;

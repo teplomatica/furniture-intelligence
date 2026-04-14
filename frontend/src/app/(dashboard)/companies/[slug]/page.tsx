@@ -25,6 +25,7 @@ interface Company {
   name: string;
   slug: string;
   website: string | null;
+  websites: string[] | null;
   segment_group: string;
   positioning: string | null;
   notes: string | null;
@@ -254,6 +255,11 @@ export default function CompanyDetailPage() {
         company={company}
         onEdit={() => setEditFormOpen(true)}
         onRefresh={() => setRefreshOpen(!refreshOpen)}
+        onDelete={async () => {
+          if (!confirm(`Удалить ${company.name} и все связанные данные?`)) return;
+          await api.delete(`/companies/${company.id}`);
+          router.push("/companies");
+        }}
         refreshing={false}
       />
 

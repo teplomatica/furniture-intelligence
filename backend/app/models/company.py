@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import DateTime, Enum, Integer, String, Text
+from sqlalchemy import DateTime, Enum, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -24,7 +24,8 @@ class Company(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)  # primary website
+    websites: Mapped[list | None] = mapped_column(JSON, nullable=True)  # additional websites
     segment_group: Mapped[SegmentGroup] = mapped_column(Enum(SegmentGroup), nullable=False)
     positioning: Mapped[Positioning | None] = mapped_column(Enum(Positioning), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -35,4 +36,4 @@ class Company(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    legal_entities: Mapped[list["LegalEntity"]] = relationship("LegalEntity", back_populates="company")
+    legal_entities: Mapped[list["LegalEntity"]] = relationship("LegalEntity", back_populates="company", cascade="all, delete-orphan")

@@ -29,10 +29,11 @@ interface Props {
   company: Company;
   onEdit: () => void;
   onRefresh: () => void;
+  onDelete: () => void;
   refreshing: boolean;
 }
 
-export function CompanyHeader({ company, onEdit, onRefresh, refreshing }: Props) {
+export function CompanyHeader({ company, onEdit, onRefresh, onDelete, refreshing }: Props) {
   return (
     <div className="bg-white rounded-lg border p-6 mb-6">
       <div className="flex items-start justify-between">
@@ -86,8 +87,16 @@ export function CompanyHeader({ company, onEdit, onRefresh, refreshing }: Props)
             onClick={onEdit}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
           >
-            Редактировать
+            {"Редактировать"}
           </button>
+          {!company.is_self && (
+            <button
+              onClick={onDelete}
+              className="px-4 py-2 bg-red-50 text-red-500 rounded-lg text-sm hover:bg-red-100"
+            >
+              {"Удалить"}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -18,6 +18,7 @@ class CompanyOut(BaseModel):
     name: str
     slug: str
     website: Optional[str]
+    websites: Optional[list[str]]
     segment_group: SegmentGroup
     positioning: Optional[Positioning]
     notes: Optional[str]
@@ -32,6 +33,7 @@ class CompanyCreate(BaseModel):
     name: str
     slug: str
     website: Optional[str] = None
+    websites: Optional[list[str]] = None
     segment_group: SegmentGroup
     positioning: Optional[Positioning] = None
     notes: Optional[str] = None
@@ -41,6 +43,7 @@ class CompanyCreate(BaseModel):
 class CompanyUpdate(BaseModel):
     name: Optional[str] = None
     website: Optional[str] = None
+    websites: Optional[list[str]] = None
     segment_group: Optional[SegmentGroup] = None
     positioning: Optional[Positioning] = None
     notes: Optional[str] = None
@@ -109,7 +112,9 @@ async def delete_company(company_id: int, db: AsyncSession = Depends(get_db), _:
     company = await db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    company.is_active = False
+    if company.is_self:
+        raise HTTPException(status_code=403, detail="Cannot delete self-company")
+    await db.delete(company)
     await db.commit()
 
 

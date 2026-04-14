@@ -35,6 +35,7 @@ async def migrate_add_columns():
         ("fi_companies", "is_self", "BOOLEAN DEFAULT FALSE"),
         ("fi_companies", "scrape_schedule", "VARCHAR(50)"),
         ("fi_companies", "last_scraped_at", "TIMESTAMP"),
+        ("fi_companies", "websites", "JSON"),
     ]
     async with engine.begin() as conn:
         for table, column, col_type in migrations:
