@@ -9,6 +9,7 @@ const NAV = [
   { href: "/categories", label: "Категории" },
   { href: "/regions", label: "Регионы" },
   { href: "/settings", label: "Настройки" },
+  { href: "/wiki", label: "Справка" },
 ];
 
 export function Sidebar() {
