@@ -34,48 +34,74 @@ async def discover_legal_entity_events(
         yield {"step": "skipped", "message": "Юрлица уже есть"}
         return
 
-    yield {"step": "scraping", "message": f"Парсим сайт {company.website}..."}
-
     try:
-        # Stream scraping progress
-        scraped_inn = None
-        scraped_ogrn = None
-        scraped_names = []
-        async for scrape_event in scrape_legal_info_streaming(company.website, db):
-            yield scrape_event
-            if scrape_event.get("inn"):
-                scraped_inn = scrape_event["inn"]
-            if scrape_event.get("ogrn"):
-                scraped_ogrn = scrape_event["ogrn"]
-            if scrape_event.get("legal_names"):
-                scraped_names = scrape_event["legal_names"]
+        # === Шаг 1: Ищем в DataNewton по названию компании ===
+        yield {"step": "searching", "message": f"Ищем в DataNewton: {company.name}"}
 
-        search_query = scraped_inn or scraped_ogrn
-        if not search_query and scraped_names:
-            search_query = scraped_names[0]
-        if not search_query:
-            search_query = company.name
-
-        yield {"step": "searching", "message": f"Ищем в DataNewton: {search_query}"}
-
-        dn_results = await datanewton.search_counterparty(search_query, limit=5)
-        if not dn_results:
-            yield {"step": "not_found", "message": "Не найдено в DataNewton"}
-            return
-
+        dn_results = await datanewton.search_counterparty(company.name, limit=5)
         best = None
-        if scraped_inn:
-            for r in dn_results:
-                if r.get("inn") == scraped_inn and r.get("active", False):
-                    best = r
-                    break
-        if not best:
+
+        if dn_results:
             for r in dn_results:
                 if r.get("active", False):
                     best = r
                     break
+            if not best:
+                best = dn_results[0]
+
+        # Если не нашли по названию, пробуем по домену
+        if not best and company.website:
+            domain = company.website.replace("www.", "").split("/")[0]
+            yield {"step": "searching", "message": f"Ищем в DataNewton по домену: {domain}"}
+            dn_results = await datanewton.search_counterparty(domain, limit=5)
+            if dn_results:
+                for r in dn_results:
+                    if r.get("active", False):
+                        best = r
+                        break
+                if not best:
+                    best = dn_results[0]
+
+        # === Шаг 2: Если DataNewton не дал результат — парсим сайт ===
         if not best:
-            best = dn_results[0]
+            yield {"step": "scraping", "message": f"DataNewton не нашёл, парсим сайт {company.website}..."}
+
+            scraped_inn = None
+            scraped_ogrn = None
+            scraped_names = []
+            async for scrape_event in scrape_legal_info_streaming(company.website, db):
+                yield scrape_event
+                if scrape_event.get("inn"):
+                    scraped_inn = scrape_event["inn"]
+                if scrape_event.get("ogrn"):
+                    scraped_ogrn = scrape_event["ogrn"]
+                if scrape_event.get("legal_names"):
+                    scraped_names = scrape_event["legal_names"]
+
+            search_query = scraped_inn or scraped_ogrn
+            if not search_query and scraped_names:
+                search_query = scraped_names[0]
+
+            if search_query:
+                yield {"step": "searching", "message": f"Повторный поиск в DataNewton: {search_query}"}
+                dn_results = await datanewton.search_counterparty(search_query, limit=5)
+                if dn_results:
+                    if scraped_inn:
+                        for r in dn_results:
+                            if r.get("inn") == scraped_inn and r.get("active", False):
+                                best = r
+                                break
+                    if not best:
+                        for r in dn_results:
+                            if r.get("active", False):
+                                best = r
+                                break
+                    if not best:
+                        best = dn_results[0]
+
+        if not best:
+            yield {"step": "not_found", "message": "Не найдено ни в DataNewton, ни на сайте"}
+            return
 
         parsed = datanewton.parse_counterparty(best)
 
