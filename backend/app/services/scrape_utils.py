@@ -46,19 +46,25 @@ async def scrape_with_firecrawl(
         if extra_headers:
             payload["headers"] = extra_headers
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        logger.info(f"Firecrawl request: {url}")
+        async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(
                 "https://api.firecrawl.dev/v1/scrape",
                 headers={"Authorization": f"Bearer {settings.firecrawl_api_key}"},
                 json=payload,
             )
             if r.status_code != 200:
-                logger.debug(f"Firecrawl {r.status_code} for {url}")
+                logger.warning(f"Firecrawl {r.status_code} for {url}: {r.text[:200]}")
                 return None
             data = r.json()
-            return data.get("data", {}).get("markdown", "")
+            md = data.get("data", {}).get("markdown", "")
+            logger.info(f"Firecrawl OK: {url} ({len(md)} chars)")
+            return md
+    except httpx.TimeoutException:
+        logger.error(f"Firecrawl TIMEOUT for {url}")
+        return None
     except Exception as e:
-        logger.debug(f"Firecrawl error for {url}: {e}")
+        logger.error(f"Firecrawl error for {url}: {type(e).__name__}: {e}")
         return None
 
 

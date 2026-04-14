@@ -9,7 +9,7 @@ from app.models.company import Company
 from app.models.legal_entity import LegalEntity
 from app.models.competitor_data import CompetitorFinancial, DataSource
 from app.services.datanewton import datanewton
-from app.services.legal_scraper import scrape_legal_info
+from app.services.legal_scraper import scrape_legal_info, scrape_legal_info_streaming
 
 logger = logging.getLogger(__name__)
 
@@ -37,24 +37,22 @@ async def discover_legal_entity_events(
     yield {"step": "scraping", "message": f"Парсим сайт {company.website}..."}
 
     try:
-        scraped = await scrape_legal_info(company.website, db)
+        # Stream scraping progress
+        scraped_inn = None
+        scraped_ogrn = None
+        scraped_names = []
+        async for scrape_event in scrape_legal_info_streaming(company.website, db):
+            yield scrape_event
+            if scrape_event.get("inn"):
+                scraped_inn = scrape_event["inn"]
+            if scrape_event.get("ogrn"):
+                scraped_ogrn = scrape_event["ogrn"]
+            if scrape_event.get("legal_names"):
+                scraped_names = scrape_event["legal_names"]
 
-        if scraped.inn or scraped.ogrn:
-            yield {
-                "step": "scraped",
-                "message": f"Найден ИНН: {scraped.inn or '—'}, ОГРН: {scraped.ogrn or '—'}",
-                "source_url": scraped.source_url,
-                "method": scraped.method,
-            }
-        else:
-            yield {
-                "step": "scraped",
-                "message": "ИНН/ОГРН не найдены на сайте, ищем по названию",
-            }
-
-        search_query = scraped.inn or scraped.ogrn
-        if not search_query and scraped.legal_names:
-            search_query = scraped.legal_names[0]
+        search_query = scraped_inn or scraped_ogrn
+        if not search_query and scraped_names:
+            search_query = scraped_names[0]
         if not search_query:
             search_query = company.name
 
@@ -66,9 +64,9 @@ async def discover_legal_entity_events(
             return
 
         best = None
-        if scraped.inn:
+        if scraped_inn:
             for r in dn_results:
-                if r.get("inn") == scraped.inn and r.get("active", False):
+                if r.get("inn") == scraped_inn and r.get("active", False):
                     best = r
                     break
         if not best:
