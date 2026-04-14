@@ -18,14 +18,25 @@ interface DataNewtonResult {
   founded_year: number | null;
 }
 
+interface EditLegalEntity {
+  id: number;
+  company_id: number;
+  inn: string | null;
+  ogrn: string | null;
+  legal_name: string;
+  region: string | null;
+  is_primary: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   companyId?: number;
+  editRecord?: EditLegalEntity | null;
 }
 
-export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompanyId }: Props) {
+export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompanyId, editRecord }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState<number | "">("");
   const [inn, setInn] = useState("");
@@ -42,16 +53,25 @@ export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompan
 
   useEffect(() => {
     if (open) {
-      if (fixedCompanyId) {
-        setCompanyId(fixedCompanyId);
+      if (editRecord) {
+        setCompanyId(editRecord.company_id);
+        setInn(editRecord.inn || "");
+        setOgrn(editRecord.ogrn || "");
+        setLegalName(editRecord.legal_name);
+        setIsPrimary(editRecord.is_primary);
       } else {
-        api.get<Company[]>("/companies").then(setCompanies);
-        setCompanyId("");
+        if (fixedCompanyId) {
+          setCompanyId(fixedCompanyId);
+        } else {
+          api.get<Company[]>("/companies").then(setCompanies);
+          setCompanyId("");
+        }
+        setInn(""); setOgrn(""); setLegalName("");
+        setIsPrimary(false);
       }
-      setInn(""); setOgrn(""); setLegalName("");
-      setIsPrimary(false); setSearchQuery(""); setSearchResults([]); setError("");
+      setSearchQuery(""); setSearchResults([]); setError("");
     }
-  }, [open, fixedCompanyId]);
+  }, [open, fixedCompanyId, editRecord]);
 
   async function handleSearch() {
     if (!searchQuery.trim()) return;
@@ -82,13 +102,22 @@ export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompan
     setSaving(true);
     setError("");
     try {
-      await api.post("/legal-entities", {
-        company_id: companyId,
-        inn: inn || null,
-        ogrn: ogrn || null,
-        legal_name: legalName,
-        is_primary: isPrimary,
-      });
+      if (editRecord) {
+        await api.patch(`/legal-entities/${editRecord.id}`, {
+          inn: inn || null,
+          ogrn: ogrn || null,
+          legal_name: legalName,
+          is_primary: isPrimary,
+        });
+      } else {
+        await api.post("/legal-entities", {
+          company_id: companyId,
+          inn: inn || null,
+          ogrn: ogrn || null,
+          legal_name: legalName,
+          is_primary: isPrimary,
+        });
+      }
       onSaved();
       onClose();
     } catch (err: any) {
@@ -99,7 +128,7 @@ export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompan
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Добавить юрлицо">
+    <Modal open={open} onClose={onClose} title={editRecord ? "Редактировать юрлицо" : "Добавить юрлицо"}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <p className="text-red-500 text-sm">{error}</p>}
 
@@ -168,7 +197,7 @@ export function LegalEntityForm({ open, onClose, onSaved, companyId: fixedCompan
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Отмена</button>
           <button type="submit" disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-            {saving ? "Сохранение..." : "Добавить"}
+            {saving ? "Сохранение..." : editRecord ? "Сохранить" : "Добавить"}
           </button>
         </div>
       </form>

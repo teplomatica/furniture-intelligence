@@ -49,6 +49,16 @@ class LegalEntityCreate(BaseModel):
     is_primary: bool = False
 
 
+class LegalEntityUpdate(BaseModel):
+    inn: Optional[str] = None
+    ogrn: Optional[str] = None
+    legal_name: Optional[str] = None
+    legal_form: Optional[str] = None
+    address: Optional[str] = None
+    region: Optional[str] = None
+    is_primary: Optional[bool] = None
+
+
 class FinancialOut(BaseModel):
     id: int
     year: int
@@ -85,8 +95,32 @@ async def delete_legal_entity(le_id: int, db: AsyncSession = Depends(get_db), _:
 
 @router.post("", response_model=LegalEntityOut, status_code=201)
 async def create_legal_entity(body: LegalEntityCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
+    # Auto-primary if first legal entity for this company
+    existing = await db.execute(
+        select(LegalEntity).where(LegalEntity.company_id == body.company_id)
+    )
+    is_first = existing.scalars().first() is None
     le = LegalEntity(**body.model_dump())
+    if is_first:
+        le.is_primary = True
     db.add(le)
+    await db.commit()
+    await db.refresh(le)
+    return le
+
+
+@router.patch("/{le_id}", response_model=LegalEntityOut)
+async def update_legal_entity(
+    le_id: int,
+    body: LegalEntityUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    le = await db.get(LegalEntity, le_id)
+    if not le:
+        raise HTTPException(status_code=404, detail="Legal entity not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(le, field, value)
     await db.commit()
     await db.refresh(le)
     return le

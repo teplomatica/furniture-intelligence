@@ -142,6 +142,7 @@ export default function CompanyDetailPage() {
   const [refreshOpen, setRefreshOpen] = useState(false);
   const [editFormOpen, setEditFormOpen] = useState(false);
   const [leFormOpen, setLeFormOpen] = useState(false);
+  const [editLE, setEditLE] = useState<LegalEntity | null>(null);
   const [finFormOpen, setFinFormOpen] = useState(false);
   const [trafficFormOpen, setTrafficFormOpen] = useState(false);
   const [assortFormOpen, setAssortFormOpen] = useState(false);
@@ -270,7 +271,8 @@ export default function CompanyDetailPage() {
 
       <LegalEntitiesSection
         entities={entities}
-        onAdd={() => setLeFormOpen(true)}
+        onAdd={() => { setEditLE(null); setLeFormOpen(true); }}
+        onEdit={(le) => { setEditLE(le); setLeFormOpen(true); }}
         onDelete={handleDeleteLE}
       />
 
@@ -337,6 +339,7 @@ export default function CompanyDetailPage() {
         onClose={() => setLeFormOpen(false)}
         onSaved={reloadDetails}
         companyId={company.id}
+        editRecord={editLE}
       />
 
       <FinancialForm

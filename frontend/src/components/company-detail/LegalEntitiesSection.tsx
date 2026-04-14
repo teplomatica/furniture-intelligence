@@ -16,10 +16,11 @@ interface LegalEntity {
 interface Props {
   entities: LegalEntity[];
   onAdd: () => void;
+  onEdit: (le: LegalEntity) => void;
   onDelete: (id: number, name: string) => void;
 }
 
-export function LegalEntitiesSection({ entities, onAdd, onDelete }: Props) {
+export function LegalEntitiesSection({ entities, onAdd, onEdit, onDelete }: Props) {
   return (
     <section className="bg-white rounded-lg border mb-4">
       <div className="px-4 py-3 flex items-center justify-between border-b bg-gray-50 rounded-t-lg">
@@ -53,6 +54,9 @@ export function LegalEntitiesSection({ entities, onAdd, onDelete }: Props) {
               </span>
               <span className="text-xs text-gray-400 w-24">{le.region || ""}</span>
               <span className="text-xs text-gray-400 w-10">{le.founded_year || ""}</span>
+              <button onClick={() => onEdit(le)} className="text-gray-400 hover:text-blue-600 text-sm">
+                {"✎"}
+              </button>
               <button
                 onClick={() => onDelete(le.id, le.legal_name)}
                 className="text-gray-300 hover:text-red-500"
