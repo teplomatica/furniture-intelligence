@@ -8,6 +8,8 @@ const NAV = [
   { href: "/companies", label: "Конкуренты" },
   { href: "/categories", label: "Категории" },
   { href: "/regions", label: "Регионы" },
+  { href: "/channels", label: "Справочники" },
+  { href: "/users", label: "Пользователи" },
   { href: "/settings", label: "Настройки" },
   { href: "/wiki", label: "Справка" },
 ];

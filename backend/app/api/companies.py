@@ -25,6 +25,8 @@ class CompanyOut(BaseModel):
     is_active: bool
     is_self: bool
     scrape_schedule: Optional[str]
+    channel_id: Optional[int]
+    positioning_id: Optional[int]
 
     model_config = {"from_attributes": True}
 
@@ -34,8 +36,10 @@ class CompanyCreate(BaseModel):
     slug: str
     website: Optional[str] = None
     websites: Optional[list[str]] = None
-    segment_group: SegmentGroup
+    segment_group: SegmentGroup = SegmentGroup.federal
     positioning: Optional[Positioning] = None
+    channel_id: Optional[int] = None
+    positioning_id: Optional[int] = None
     notes: Optional[str] = None
     is_self: bool = False
 
@@ -46,9 +50,17 @@ class CompanyUpdate(BaseModel):
     websites: Optional[list[str]] = None
     segment_group: Optional[SegmentGroup] = None
     positioning: Optional[Positioning] = None
+    channel_id: Optional[int] = None
+    positioning_id: Optional[int] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
     scrape_schedule: Optional[str] = None
+
+
+class BulkCompanyUpdate(BaseModel):
+    company_ids: list[int]
+    channel_id: Optional[int] = None
+    positioning_id: Optional[int] = None
 
 
 @router.get("", response_model=list[CompanyOut])
@@ -105,6 +117,26 @@ async def update_company(
     await db.commit()
     await db.refresh(company)
     return company
+
+
+@router.patch("/bulk-update", response_model=dict)
+async def bulk_update_companies(
+    body: BulkCompanyUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    updated = 0
+    for cid in body.company_ids:
+        company = await db.get(Company, cid)
+        if not company:
+            continue
+        if body.channel_id is not None:
+            company.channel_id = body.channel_id
+        if body.positioning_id is not None:
+            company.positioning_id = body.positioning_id
+        updated += 1
+    await db.commit()
+    return {"updated": updated}
 
 
 @router.delete("/{company_id}", status_code=204)

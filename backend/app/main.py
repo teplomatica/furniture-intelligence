@@ -12,7 +12,7 @@ from app.api import (
     assortment, regions, offers, company_region_config,
 )
 from app.api import settings as settings_api
-from app.api import scrape_test, site_analysis, dashboard, company_mappings
+from app.api import scrape_test, site_analysis, dashboard, company_mappings, channels
 
 
 async def create_superadmin():
@@ -36,6 +36,8 @@ async def migrate_add_columns():
         ("fi_companies", "scrape_schedule", "VARCHAR(50)"),
         ("fi_companies", "last_scraped_at", "TIMESTAMP"),
         ("fi_companies", "websites", "JSON"),
+        ("fi_companies", "channel_id", "INTEGER"),
+        ("fi_companies", "positioning_id", "INTEGER"),
     ]
     async with engine.begin() as conn:
         for table, column, col_type in migrations:
@@ -83,6 +85,7 @@ app.include_router(scrape_test.router)
 app.include_router(site_analysis.router)
 app.include_router(dashboard.router)
 app.include_router(company_mappings.router)
+app.include_router(channels.router)
 
 
 @app.get("/health")

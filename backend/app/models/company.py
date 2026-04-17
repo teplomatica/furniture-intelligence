@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import DateTime, Enum, Integer, String, Text, JSON
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -26,8 +26,10 @@ class Company(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)  # primary website
     websites: Mapped[list | None] = mapped_column(JSON, nullable=True)  # additional websites
-    segment_group: Mapped[SegmentGroup] = mapped_column(Enum(SegmentGroup), nullable=False)
-    positioning: Mapped[Positioning | None] = mapped_column(Enum(Positioning), nullable=True)
+    segment_group: Mapped[SegmentGroup] = mapped_column(Enum(SegmentGroup), nullable=False)  # legacy
+    positioning: Mapped[Positioning | None] = mapped_column(Enum(Positioning), nullable=True)  # legacy
+    channel_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_channels.id"), nullable=True)
+    positioning_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_positionings.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
     is_self: Mapped[bool] = mapped_column(default=False)  # "наша" компания (Divan.ru)

@@ -3,19 +3,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "./Modal";
 
-const SEGMENT_OPTIONS = [
-  { value: "federal", label: "А: Федеральные сети" },
-  { value: "online", label: "Б: Онлайн-ритейлеры" },
-  { value: "premium", label: "В: Премиум" },
-  { value: "marketplace", label: "Г: Маркетплейсы" },
-];
-
-const POSITIONING_OPTIONS = [
-  { value: "", label: "— не указано —" },
-  { value: "budget", label: "Бюджет" },
-  { value: "mid", label: "Средний" },
-  { value: "premium", label: "Премиум" },
-];
+interface RefItem { id: number; name: string; }
 
 interface Company {
   id: number;
@@ -27,6 +15,8 @@ interface Company {
   positioning: string | null;
   notes: string | null;
   is_self?: boolean;
+  channel_id?: number | null;
+  positioning_id?: number | null;
 }
 
 interface Props {
@@ -45,11 +35,20 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
   const [slug, setSlug] = useState("");
   const [website, setWebsite] = useState("");
   const [extraWebsites, setExtraWebsites] = useState<string[]>([]);
-  const [segmentGroup, setSegmentGroup] = useState("federal");
-  const [positioning, setPositioning] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const [positioningId, setPositioningId] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [channelsList, setChannelsList] = useState<RefItem[]>([]);
+  const [positioningsList, setPositioningsList] = useState<RefItem[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      api.get<RefItem[]>("/channels").then(setChannelsList);
+      api.get<RefItem[]>("/positionings").then(setPositioningsList);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (editCompany) {
@@ -57,12 +56,12 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
       setSlug(editCompany.slug);
       setWebsite(editCompany.website || "");
       setExtraWebsites(editCompany.websites || []);
-      setSegmentGroup(editCompany.segment_group);
-      setPositioning(editCompany.positioning || "");
+      setChannelId(editCompany.channel_id ? String(editCompany.channel_id) : "");
+      setPositioningId(editCompany.positioning_id ? String(editCompany.positioning_id) : "");
       setNotes(editCompany.notes || "");
     } else {
       setName(""); setSlug(""); setWebsite(""); setExtraWebsites([]);
-      setSegmentGroup("federal"); setPositioning(""); setNotes("");
+      setChannelId(""); setPositioningId(""); setNotes("");
     }
     setError("");
   }, [editCompany, open]);
@@ -77,8 +76,8 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
       slug: slug || slugify(name),
       website: website || null,
       websites: allWebsites.length > 0 ? allWebsites : null,
-      segment_group: segmentGroup,
-      positioning: positioning || null,
+      channel_id: channelId ? Number(channelId) : null,
+      positioning_id: positioningId ? Number(positioningId) : null,
       notes: notes || null,
     };
     try {
@@ -134,17 +133,19 @@ export function CompanyForm({ open, onClose, onSaved, editCompany }: Props) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Группа *</label>
-            <select value={segmentGroup} onChange={(e) => setSegmentGroup(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">{"Канал"}</label>
+            <select value={channelId} onChange={(e) => setChannelId(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm">
-              {SEGMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              <option value="">{"\u2014 не указан \u2014"}</option>
+              {channelsList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Позиционирование</label>
-            <select value={positioning} onChange={(e) => setPositioning(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">{"Позиционирование"}</label>
+            <select value={positioningId} onChange={(e) => setPositioningId(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm">
-              {POSITIONING_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              <option value="">{"\u2014 не указано \u2014"}</option>
+              {positioningsList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         </div>

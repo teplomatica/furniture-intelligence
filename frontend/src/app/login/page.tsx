@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 export default function LoginPage() {
@@ -52,6 +53,10 @@ export default function LoginPage() {
         >
           {loading ? "Вход..." : "Войти"}
         </button>
+        <p className="text-center text-xs text-gray-400 mt-4">
+          {"Нет аккаунта? "}
+          <Link href="/register" className="text-blue-600 hover:underline">{"Зарегистрироваться"}</Link>
+        </p>
       </form>
     </main>
   );

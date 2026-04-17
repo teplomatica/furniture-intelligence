@@ -8,6 +8,7 @@ from app.models.company import Company, SegmentGroup, Positioning
 from app.models.category import Category, PriceSegment
 from app.models.region import Region
 from app.models.setting import Setting
+from app.models.channel import Channel, PositioningRef
 
 COMPANIES = [
     # Мы
@@ -97,6 +98,19 @@ REGIONS = [
     dict(name="Казань", slug="kazan", sort_order=5, city_firecrawl="Казань"),
 ]
 
+CHANNELS = [
+    dict(name="Федеральные сети", slug="federal", sort_order=0),
+    dict(name="Онлайн-ритейлеры", slug="online", sort_order=1),
+    dict(name="Премиум", slug="premium", sort_order=2),
+    dict(name="Маркетплейсы", slug="marketplace", sort_order=3),
+]
+
+POSITIONINGS = [
+    dict(name="Бюджет", slug="budget", sort_order=0),
+    dict(name="Средний", slug="mid", sort_order=1),
+    dict(name="Премиум", slug="premium", sort_order=2),
+]
+
 SEGMENT_NAMES = ["Бюджет", "Средний", "Премиум"]
 
 
@@ -143,6 +157,20 @@ async def seed():
             existing = await db.execute(sel(Region).where(Region.slug == data["slug"]))
             if not existing.scalar_one_or_none():
                 db.add(Region(**data))
+
+        # Каналы
+        for data in CHANNELS:
+            from sqlalchemy import select as sel3
+            existing = await db.execute(sel3(Channel).where(Channel.slug == data["slug"]))
+            if not existing.scalar_one_or_none():
+                db.add(Channel(**data))
+
+        # Позиционирование
+        for data in POSITIONINGS:
+            from sqlalchemy import select as sel4
+            existing = await db.execute(sel4(PositioningRef).where(PositioningRef.slug == data["slug"]))
+            if not existing.scalar_one_or_none():
+                db.add(PositioningRef(**data))
 
         # Настройки
         for data in DEFAULT_SETTINGS:

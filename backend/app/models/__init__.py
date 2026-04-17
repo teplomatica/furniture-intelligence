@@ -13,6 +13,7 @@ from app.models.offer import (
     CategorySource, LogField, StockFilterMethod, RegionMethod,
 )
 from app.models.setting import Setting
+from app.models.channel import Channel, PositioningRef
 from app.models.company_mapping import CompanyCategoryMapping, CompanyRegionMapping, CompanyScrapeMatrix
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "Offer", "OfferCategoryLog", "CompanyRegionConfig",
     "CategorySource", "LogField", "StockFilterMethod", "RegionMethod",
     "Setting",
+    "Channel", "PositioningRef",
     "CompanyCategoryMapping", "CompanyRegionMapping", "CompanyScrapeMatrix",
 ]

@@ -4,18 +4,8 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { CompanyForm } from "@/components/CompanyForm";
 
-const SEGMENT_LABELS: Record<string, string> = {
-  federal: "А: Федеральные сети",
-  online: "Б: Онлайн-ритейлеры",
-  premium: "В: Премиум",
-  marketplace: "Г: Маркетплейсы",
-};
-
-const POSITIONING_LABELS: Record<string, string> = {
-  budget: "Бюджет",
-  mid: "Средний",
-  premium: "Премиум",
-};
+interface Channel { id: number; name: string; }
+interface Positioning { id: number; name: string; }
 
 interface Company {
   id: number;
@@ -28,6 +18,8 @@ interface Company {
   notes: string | null;
   is_active: boolean;
   is_self: boolean;
+  channel_id: number | null;
+  positioning_id: number | null;
 }
 
 interface CountItem {
@@ -45,6 +37,8 @@ export default function CompaniesPage() {
   const [finCounts, setFinCounts] = useState<Record<number, number>>({});
   const [trafficCounts, setTrafficCounts] = useState<Record<number, number>>({});
   const [assortCounts, setAssortCounts] = useState<Record<number, number>>({});
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [positionings, setPositionings] = useState<Positioning[]>([]);
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -53,8 +47,12 @@ export default function CompaniesPage() {
       api.get<CountItem[]>("/financials"),
       api.get<CountItem[]>("/traffic"),
       api.get<CountItem[]>("/assortment"),
+      api.get<Channel[]>("/channels"),
+      api.get<Positioning[]>("/positionings"),
     ])
-      .then(([companies, les, fins, traffic, assort]) => {
+      .then(([companies, les, fins, traffic, assort, chs, poss]) => {
+        setChannels(chs);
+        setPositionings(poss);
         setCompanies(companies);
 
         // Count legal entities per company
@@ -98,10 +96,13 @@ export default function CompaniesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const chById = Object.fromEntries(channels.map((c) => [c.id, c]));
+  const posById = Object.fromEntries(positionings.map((p) => [p.id, p]));
   const selfCompanies = companies.filter((c) => c.is_self);
   const competitors = companies.filter((c) => !c.is_self);
-  const grouped = competitors.reduce<Record<string, Company[]>>((acc, c) => {
-    (acc[c.segment_group] ||= []).push(c);
+  const grouped = competitors.reduce<Record<number | string, Company[]>>((acc, c) => {
+    const key = c.channel_id || "unassigned";
+    (acc[key] ||= []).push(c);
     return acc;
   }, {});
 
@@ -149,7 +150,7 @@ export default function CompaniesPage() {
                         </a>
                       ) : "\u2014"}
                     </td>
-                    <td className="px-4 py-2">{c.positioning ? POSITIONING_LABELS[c.positioning] : "\u2014"}</td>
+                    <td className="px-4 py-2">{c.positioning_id ? posById[c.positioning_id]?.name : "\u2014"}</td>
                     <td className="px-4 py-2">
                       <div className="flex gap-2 text-xs">
                         <span className={`px-1.5 py-0.5 rounded ${(leCounts[c.id] || 0) > 0 ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-400"}`}>
@@ -172,10 +173,10 @@ export default function CompaniesPage() {
         </section>
       )}
 
-      {Object.entries(SEGMENT_LABELS).map(([group, label]) => {
-        const items = grouped[group] || [];
+      {[...channels.map((ch) => ({ key: ch.id, label: ch.name })), ...(!grouped["unassigned"] ? [] : [{ key: "unassigned" as any, label: "Без канала" }])].map(({ key, label }) => {
+        const items = grouped[key] || [];
         return (
-          <section key={group} className="mb-8">
+          <section key={key} className="mb-8">
             <h2 className="text-lg font-semibold mb-3 text-gray-700">{label}</h2>
             {items.length === 0 ? (
               <p className="text-gray-400 text-sm">Нет данных</p>
@@ -207,7 +208,7 @@ export default function CompaniesPage() {
                           ) : "—"}
                         </td>
                         <td className="px-4 py-2">
-                          {c.positioning ? POSITIONING_LABELS[c.positioning] : "—"}
+                          {c.positioning_id ? posById[c.positioning_id]?.name : "\u2014"}
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex gap-2 text-xs">
