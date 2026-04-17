@@ -39,12 +39,25 @@ class CategoryCreate(BaseModel):
     sort_order: int = 0
 
 
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
 class PriceSegmentCreate(BaseModel):
     category_id: int
     name: str
     price_min: Optional[int] = None
     price_max: Optional[int] = None
     sort_order: int = 0
+
+
+class PriceSegmentUpdate(BaseModel):
+    name: Optional[str] = None
+    price_min: Optional[int] = None
+    price_max: Optional[int] = None
+    sort_order: Optional[int] = None
 
 
 @router.get("", response_model=list[CategoryOut])
@@ -81,10 +94,43 @@ async def create_price_segment(body: PriceSegmentCreate, db: AsyncSession = Depe
     return seg
 
 
+@router.patch("/{category_id}", response_model=CategoryOut)
+async def update_category(category_id: int, body: CategoryUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
+    cat = await db.get(Category, category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(cat, field, value)
+    await db.commit()
+    await db.refresh(cat)
+    return cat
+
+
 @router.delete("/{category_id}", status_code=204)
 async def delete_category(category_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
     cat = await db.get(Category, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     await db.delete(cat)
+    await db.commit()
+
+
+@router.patch("/price-segments/{seg_id}", response_model=PriceSegmentOut)
+async def update_price_segment(seg_id: int, body: PriceSegmentUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
+    seg = await db.get(PriceSegment, seg_id)
+    if not seg:
+        raise HTTPException(status_code=404, detail="Price segment not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(seg, field, value)
+    await db.commit()
+    await db.refresh(seg)
+    return seg
+
+
+@router.delete("/price-segments/{seg_id}", status_code=204)
+async def delete_price_segment(seg_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_editor)):
+    seg = await db.get(PriceSegment, seg_id)
+    if not seg:
+        raise HTTPException(status_code=404, detail="Price segment not found")
+    await db.delete(seg)
     await db.commit()

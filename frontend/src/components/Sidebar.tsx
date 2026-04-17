@@ -6,9 +6,7 @@ import { api } from "@/lib/api";
 const NAV = [
   { href: "/dashboard", label: "Дашборд" },
   { href: "/companies", label: "Конкуренты" },
-  { href: "/categories", label: "Категории" },
-  { href: "/regions", label: "Регионы" },
-  { href: "/channels", label: "Справочники" },
+  { href: "/references", label: "Справочники" },
   { href: "/users", label: "Пользователи" },
   { href: "/settings", label: "Настройки" },
   { href: "/wiki", label: "Справка" },

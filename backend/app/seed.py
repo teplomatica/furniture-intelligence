@@ -85,7 +85,7 @@ DEFAULT_SETTINGS = [
     dict(key="rate_limit_seconds", value="1.5", description="Пауза между Firecrawl вызовами (секунды)"),
     dict(key="firecrawl_wait_for", value="2000", description="Ожидание рендеринга в Firecrawl (мс)"),
     dict(key="debug_mode", value="false", description="Debug mode: ограничивает количество запросов"),
-    dict(key="debug_max_api_calls", value="3", description="Макс. Firecrawl вызовов за один refresh в debug mode"),
+    dict(key="debug_max_api_calls", value="10", description="Макс. Firecrawl вызовов (страниц) за один refresh в debug mode"),
     dict(key="debug_max_offers_per_page", value="5", description="Макс. офферов с одной страницы в debug mode"),
 ]
 
