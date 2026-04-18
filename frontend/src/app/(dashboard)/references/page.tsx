@@ -92,58 +92,74 @@ export default function ReferencesPage() {
         <SimpleTable items={regions} onAdd={() => openForm("region")} onEdit={(i) => openForm("region", i)} onDelete={(id, name) => handleDelete("/regions", id, name)} />
       )}
 
-      {/* Categories */}
+      {/* Categories — 3-level tree */}
       {tab === "categories" && (
         <div>
           <div className="flex justify-end mb-3">
             <button onClick={() => openForm("category")} className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-              {"+ Добавить категорию"}
+              {"+ Категория"}
             </button>
           </div>
           {topCategories.map((cat) => {
             const children = categories.filter((c) => c.parent_id === cat.id);
             return (
               <div key={cat.id} className="bg-white rounded-lg border mb-4">
-                <div className="px-4 py-3 flex items-center justify-between bg-gray-50 rounded-t-lg">
-                  <span className="font-semibold">{cat.name}</span>
-                  <div className="flex gap-1">
+                {/* Level 1: Category */}
+                <div className="px-4 py-3 flex items-center justify-between bg-gray-100 rounded-t-lg border-b">
+                  <div>
+                    <span className="font-semibold text-gray-800">{cat.name}</span>
+                    <span className="ml-2 text-xs text-gray-400 font-mono">{cat.slug}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditItem(null); setFormType("subcategory_of_" + cat.id); setFormOpen(true); }}
+                      className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">{"+ Подкатегория"}</button>
+                    <button onClick={() => { setEditSeg(null); setSegCatId(cat.id); setSegFormOpen(true); }}
+                      className="text-xs px-2 py-0.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100">{"+ Сегмент"}</button>
                     <button onClick={() => openForm("category", cat)} className="text-gray-400 hover:text-blue-600 text-sm">{"✎"}</button>
                     <button onClick={() => handleDelete("/categories", cat.id, cat.name)} className="text-gray-300 hover:text-red-500">&times;</button>
                   </div>
                 </div>
-                {/* Price segments */}
-                {cat.price_segments.length > 0 && (
-                  <div className="px-4 py-2 border-b bg-gray-50/50">
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <span className="text-xs text-gray-400">{"Сегменты:"}</span>
-                      {cat.price_segments.map((seg) => (
-                        <span key={seg.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs">
-                          {seg.name}: {seg.price_min?.toLocaleString("ru-RU") || "0"} — {seg.price_max?.toLocaleString("ru-RU") || "\u221E"} {"\u20BD"}
-                          <button onClick={() => { setEditSeg(seg); setSegCatId(cat.id); setSegFormOpen(true); }} className="text-gray-400 hover:text-blue-600">{"✎"}</button>
-                          <button onClick={() => handleDelete("/categories/price-segments", seg.id, seg.name)} className="text-gray-300 hover:text-red-500">&times;</button>
-                        </span>
-                      ))}
-                      <button onClick={() => { setEditSeg(null); setSegCatId(cat.id); setSegFormOpen(true); }} className="text-xs text-blue-600 hover:text-blue-800">{"+"}</button>
-                    </div>
-                  </div>
-                )}
-                {cat.price_segments.length === 0 && (
-                  <div className="px-4 py-2 border-b bg-gray-50/50">
-                    <button onClick={() => { setEditSeg(null); setSegCatId(cat.id); setSegFormOpen(true); }} className="text-xs text-blue-600">{"+ Добавить сегмент"}</button>
-                  </div>
-                )}
-                {/* Subcategories */}
+
+                {/* Level 2: Subcategories */}
                 {children.length > 0 && (
-                  <div className="px-4 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      {children.map((ch) => (
-                        <span key={ch.id} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
-                          {ch.name}
-                          <button onClick={() => handleDelete("/categories", ch.id, ch.name)} className="text-blue-300 hover:text-red-500 ml-1">&times;</button>
+                  <div className="border-b">
+                    {children.map((sub) => (
+                      <div key={sub.id} className="px-4 py-2 flex items-center justify-between hover:bg-gray-50 border-b border-gray-50 last:border-b-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-300 pl-2">{"\u2514"}</span>
+                          <span className="text-sm font-medium text-gray-700">{sub.name}</span>
+                          <span className="text-xs text-gray-400 font-mono">{sub.slug}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => openForm("subcategory", sub)} className="text-gray-400 hover:text-blue-600 text-xs">{"✎"}</button>
+                          <button onClick={() => handleDelete("/categories", sub.id, sub.name)} className="text-gray-300 hover:text-red-500 text-sm">&times;</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Level 3: Price segments */}
+                {cat.price_segments.length > 0 && (
+                  <div className="px-4 py-2 bg-purple-50/30">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <span className="text-xs text-purple-400 font-medium">{"Ценовые сегменты:"}</span>
+                      {cat.price_segments.map((seg) => (
+                        <span key={seg.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-purple-100 rounded text-xs text-purple-700">
+                          <span className="font-medium">{seg.name}</span>
+                          <span className="text-purple-400">
+                            {seg.price_min?.toLocaleString("ru-RU") || "0"} {"\u2014"} {seg.price_max?.toLocaleString("ru-RU") || "\u221E"} {"\u20BD"}
+                          </span>
+                          <button onClick={() => { setEditSeg(seg); setSegCatId(cat.id); setSegFormOpen(true); }} className="text-purple-300 hover:text-purple-600">{"✎"}</button>
+                          <button onClick={() => handleDelete("/categories/price-segments", seg.id, seg.name)} className="text-purple-300 hover:text-red-500">&times;</button>
                         </span>
                       ))}
                     </div>
                   </div>
+                )}
+
+                {children.length === 0 && cat.price_segments.length === 0 && (
+                  <div className="px-4 py-3 text-xs text-gray-400">{"Нет подкатегорий и сегментов"}</div>
                 )}
               </div>
             );
@@ -155,7 +171,7 @@ export default function ReferencesPage() {
       <RefForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={load} editItem={editItem} formType={formType} categories={topCategories} />
 
       {/* Price segment form */}
-      <SegmentForm open={segFormOpen} onClose={() => setSegFormOpen(false)} onSaved={load} editSeg={editSeg} categoryId={segCatId} />
+      <SegmentForm open={segFormOpen} onClose={() => setSegFormOpen(false)} onSaved={load} editSeg={editSeg} categoryId={segCatId} categories={categories} />
     </div>
   );
 }
@@ -222,7 +238,16 @@ function RefForm({ open, onClose, onSaved, editItem, formType, categories }: {
     setError("");
   }, [editItem, open]);
 
+  const isSubcategory = formType === "subcategory" || formType.startsWith("subcategory_of_");
   const apiPath = formType === "channel" ? "/channels" : formType === "positioning" ? "/positionings" : formType === "region" ? "/regions" : "/categories";
+
+  // Auto-set parent for subcategory
+  useEffect(() => {
+    if (formType.startsWith("subcategory_of_") && !editItem?.parent_id) {
+      const parentId = formType.split("_").pop() || "";
+      setParentId(parentId);
+    }
+  }, [formType, editItem]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError("");
@@ -242,11 +267,12 @@ function RefForm({ open, onClose, onSaved, editItem, formType, categories }: {
     <Modal open={open} onClose={onClose} title={title}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <p className="text-red-500 text-sm">{error}</p>}
-        {formType === "category" && (
+        {(formType === "category" || isSubcategory) && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{"Родитель"}</label>
-            <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              <option value="">{"— корневая —"}</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{"Родительская категория"}</label>
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm"
+              disabled={isSubcategory && !editItem}>
+              <option value="">{"— корневая категория —"}</option>
               {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -271,13 +297,15 @@ function RefForm({ open, onClose, onSaved, editItem, formType, categories }: {
   );
 }
 
-function SegmentForm({ open, onClose, onSaved, editSeg, categoryId }: {
+function SegmentForm({ open, onClose, onSaved, editSeg, categoryId, categories }: {
   open: boolean; onClose: () => void; onSaved: () => void;
-  editSeg: PriceSegment | null; categoryId: number;
+  editSeg: PriceSegment | null; categoryId: number; categories: Category[];
 }) {
   const [name, setName] = useState("");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
+  const [parentId, setParentId] = useState("");
+  const [sortOrder, setSortOrder] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -286,23 +314,26 @@ function SegmentForm({ open, onClose, onSaved, editSeg, categoryId }: {
       setName(editSeg.name);
       setPriceMin(editSeg.price_min != null ? String(editSeg.price_min) : "");
       setPriceMax(editSeg.price_max != null ? String(editSeg.price_max) : "");
+      setParentId(String(editSeg.category_id));
+      setSortOrder(editSeg.sort_order);
     } else {
       setName(""); setPriceMin(""); setPriceMax("");
+      setParentId(String(categoryId)); setSortOrder(0);
     }
     setError("");
-  }, [editSeg, open]);
+  }, [editSeg, open, categoryId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError("");
     try {
       if (editSeg) {
         await api.patch(`/categories/price-segments/${editSeg.id}`, {
-          name, price_min: priceMin ? Number(priceMin) : null, price_max: priceMax ? Number(priceMax) : null,
+          name, price_min: priceMin ? Number(priceMin) : null, price_max: priceMax ? Number(priceMax) : null, sort_order: sortOrder,
         });
       } else {
         await api.post("/categories/price-segments", {
-          category_id: categoryId, name,
-          price_min: priceMin ? Number(priceMin) : null, price_max: priceMax ? Number(priceMax) : null,
+          category_id: Number(parentId), name,
+          price_min: priceMin ? Number(priceMin) : null, price_max: priceMax ? Number(priceMax) : null, sort_order: sortOrder,
         });
       }
       onSaved(); onClose();
@@ -310,23 +341,35 @@ function SegmentForm({ open, onClose, onSaved, editSeg, categoryId }: {
     finally { setSaving(false); }
   }
 
+  const topCats = categories.filter((c) => c.level === 1);
+
   return (
-    <Modal open={open} onClose={onClose} title={editSeg ? "Редактировать сегмент" : "Добавить сегмент"}>
+    <Modal open={open} onClose={onClose} title={editSeg ? "Редактировать ценовой сегмент" : "Добавить ценовой сегмент"}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <p className="text-red-500 text-sm">{error}</p>}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{"Родительская категория"}</label>
+          <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" disabled={!!editSeg}>
+            {topCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">{"Название *"}</label>
           <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" required placeholder="Бюджет" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{"Мин. цена"}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{"Мин. цена (\u20BD)"}</label>
             <input type="number" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="0" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{"Макс. цена"}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{"Макс. цена (\u20BD)"}</label>
             <input type="number" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="\u221E" />
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{"Порядок"}</label>
+          <input type="number" value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg text-sm" />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600">{"Отмена"}</button>
