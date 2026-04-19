@@ -39,6 +39,10 @@ export default function CompaniesPage() {
   const [assortCounts, setAssortCounts] = useState<Record<number, number>>({});
   const [channels, setChannels] = useState<Channel[]>([]);
   const [positionings, setPositionings] = useState<Positioning[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkChannel, setBulkChannel] = useState<string>("");
+  const [bulkPositioning, setBulkPositioning] = useState<string>("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const loadData = useCallback(() => {
     Promise.all([
@@ -106,6 +110,41 @@ export default function CompaniesPage() {
     return acc;
   }, {});
 
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (ids: number[]) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.every((id) => next.has(id));
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkApply = async () => {
+    if (selected.size === 0) return;
+    if (!bulkChannel && !bulkPositioning) return;
+    setBulkSaving(true);
+    try {
+      const body: any = { company_ids: Array.from(selected) };
+      if (bulkChannel) body.channel_id = bulkChannel === "null" ? null : Number(bulkChannel);
+      if (bulkPositioning) body.positioning_id = bulkPositioning === "null" ? null : Number(bulkPositioning);
+      await api.patch("/companies/bulk-update", body);
+      setSelected(new Set());
+      setBulkChannel("");
+      setBulkPositioning("");
+      loadData();
+    } catch {}
+    setBulkSaving(false);
+  };
+
   if (loading) return <div className="text-gray-400">Загрузка...</div>;
 
   return (
@@ -119,6 +158,37 @@ export default function CompaniesPage() {
           + Добавить
         </button>
       </div>
+
+      {selected.size > 0 && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium text-blue-700">{"Выбрано: " + selected.size}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">{"Канал:"}</span>
+            <select value={bulkChannel} onChange={(e) => setBulkChannel(e.target.value)}
+              className="text-xs px-2 py-1 border rounded bg-white">
+              <option value="">{"—"}</option>
+              <option value="null">{"(без канала)"}</option>
+              {channels.map((ch) => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">{"Позиционирование:"}</span>
+            <select value={bulkPositioning} onChange={(e) => setBulkPositioning(e.target.value)}
+              className="text-xs px-2 py-1 border rounded bg-white">
+              <option value="">{"—"}</option>
+              <option value="null">{"(без позиционирования)"}</option>
+              {positionings.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <button onClick={handleBulkApply} disabled={bulkSaving || (!bulkChannel && !bulkPositioning)}
+            className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50">
+            {bulkSaving ? "..." : "Применить"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto">
+            {"Сбросить"}
+          </button>
+        </div>
+      )}
 
       {selfCompanies.length > 0 && (
         <section className="mb-8">
@@ -185,6 +255,11 @@ export default function CompaniesPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>
+                      <th className="w-8 px-2 py-2">
+                        <input type="checkbox"
+                          checked={items.length > 0 && items.every((c) => selected.has(c.id))}
+                          onChange={() => toggleSelectAll(items.map((c) => c.id))} />
+                      </th>
                       <th className="text-left px-4 py-2">Компания</th>
                       <th className="text-left px-4 py-2">Сайт</th>
                       <th className="text-left px-4 py-2">Позиционирование</th>
@@ -194,7 +269,10 @@ export default function CompaniesPage() {
                   </thead>
                   <tbody>
                     {items.map((c) => (
-                      <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50 ${selected.has(c.id) ? "bg-blue-50/30" : ""}`}>
+                        <td className="px-2 py-2">
+                          <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} />
+                        </td>
                         <td className="px-4 py-2">
                           <Link href={`/companies/${c.slug}`} className="font-medium text-blue-600 hover:underline">
                             {c.name}
