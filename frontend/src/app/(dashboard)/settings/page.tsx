@@ -73,6 +73,13 @@ export default function SettingsPage() {
         )}
       </div>
 
+      {debugMode && (
+        <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          <strong>{"Debug mode активен."}</strong>{" При запуске парсинга каждая задача ограничена: "}
+          <strong>{"1 страница"}</strong>{" и "}<strong>{"не более 10 товаров"}</strong>{"."}
+        </div>
+      )}
+
       {Object.entries(GROUPS).map(([groupKey, group]) => (
         <section key={groupKey} className="mb-6">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">

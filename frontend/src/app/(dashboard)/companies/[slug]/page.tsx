@@ -169,16 +169,20 @@ export default function CompanyDetailPage() {
   }, [slug]);
 
   const loadDetails = useCallback(async (companyId: number) => {
+    // Lazy load: каждая секция загружается независимо, ошибка одной не ломает остальные
+    const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
+      try { return await p; } catch { return fallback; }
+    };
     const [le, fin, tr, assort, cats, regs, catMaps, regMaps, matrixData] = await Promise.all([
-      api.get<LegalEntity[]>(`/legal-entities?company_id=${companyId}`),
-      api.get<Financial[]>(`/financials?company_id=${companyId}`),
-      api.get<Traffic[]>(`/traffic?company_id=${companyId}`),
-      api.get<Assortment[]>(`/assortment?company_id=${companyId}`),
-      api.get<Category[]>("/categories"),
-      api.get<Region[]>("/regions"),
-      api.get<any[]>(`/companies/${companyId}/category-mappings`),
-      api.get<any[]>(`/companies/${companyId}/region-mappings`),
-      api.get<any[]>(`/companies/${companyId}/scrape-matrix`),
+      safe(api.get<LegalEntity[]>(`/legal-entities?company_id=${companyId}`), []),
+      safe(api.get<Financial[]>(`/financials?company_id=${companyId}`), []),
+      safe(api.get<Traffic[]>(`/traffic?company_id=${companyId}`), []),
+      safe(api.get<Assortment[]>(`/assortment?company_id=${companyId}`), []),
+      safe(api.get<Category[]>("/categories"), []),
+      safe(api.get<Region[]>("/regions"), []),
+      safe(api.get<any[]>(`/companies/${companyId}/category-mappings`), []),
+      safe(api.get<any[]>(`/companies/${companyId}/region-mappings`), []),
+      safe(api.get<any[]>(`/companies/${companyId}/scrape-matrix`), []),
     ]);
     setEntities(le);
     setFinancials(fin);

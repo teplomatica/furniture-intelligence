@@ -47,71 +47,86 @@ async def _extract_with_llm(markdown: str, base_url: str) -> list[dict]:
     # Truncate if too long
     text = markdown[:MAX_MARKDOWN_FOR_LLM]
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 4096,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": f"{EXTRACTION_PROMPT}\n\n---\n\nBase URL: {base_url}\n\n{text}",
-                        }
-                    ],
-                },
-            )
-            if r.status_code != 200:
-                logger.error(f"Claude API error {r.status_code}: {r.text[:500]}")
-                return []
-
-            data = r.json()
-            content = data.get("content", [{}])[0].get("text", "")
-
-            # Parse JSON from response (handle markdown code blocks)
-            content = content.strip()
-            if content.startswith("```"):
-                content = re.sub(r'^```(?:json)?\s*', '', content)
-                content = re.sub(r'\s*```$', '', content)
-
-            offers = json.loads(content)
-
-            if not isinstance(offers, list):
-                logger.error(f"Claude returned non-list: {type(offers)}")
-                return []
-
-            # Validate and clean
-            cleaned = []
-            for o in offers:
-                if not isinstance(o, dict) or not o.get("name"):
+    import asyncio
+    MAX_RETRIES = 5
+    for attempt in range(MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 4096,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": f"{EXTRACTION_PROMPT}\n\n---\n\nBase URL: {base_url}\n\n{text}",
+                            }
+                        ],
+                    },
+                )
+                # Rate limit — wait and retry
+                if r.status_code == 429:
+                    retry_after = int(r.headers.get("retry-after", "0")) or (10 * (attempt + 1))
+                    logger.warning(f"Claude rate limit, sleeping {retry_after}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    await asyncio.sleep(retry_after)
                     continue
-                # Resolve relative URLs
-                url = o.get("url")
-                if url and url.startswith("/"):
-                    url = f"{base_url.rstrip('/')}{url}"
-                cleaned.append({
-                    "name": str(o.get("name", "")),
-                    "url": url,
-                    "price": _safe_int(o.get("price")),
-                    "price_old": _safe_int(o.get("price_old")),
-                    "is_available": o.get("is_available"),
-                    "sku": o.get("sku"),
-                    "image_url": o.get("image_url"),
-                    "characteristics": None,
-                })
-            return cleaned
+                if r.status_code != 200:
+                    logger.error(f"Claude API error {r.status_code}: {r.text[:500]}")
+                    return []
+                break  # success — exit retry loop
+        except Exception as e:
+            logger.error(f"Claude API request failed: {e}")
+            if attempt == MAX_RETRIES - 1:
+                return []
+            await asyncio.sleep(5)
+            continue
+    else:
+        # All retries exhausted
+        logger.error("Claude API: all retries exhausted (rate limit)")
+        return []
 
+    try:
+        data = r.json()
+        content = data.get("content", [{}])[0].get("text", "")
+        content = content.strip()
+        if content.startswith("```"):
+            content = re.sub(r'^```(?:json)?\s*', '', content)
+            content = re.sub(r'\s*```$', '', content)
+
+        offers = json.loads(content)
+        if not isinstance(offers, list):
+            logger.error(f"Claude returned non-list: {type(offers)}")
+            return []
+
+        cleaned = []
+        for o in offers:
+            if not isinstance(o, dict) or not o.get("name"):
+                continue
+            url = o.get("url")
+            if url and url.startswith("/"):
+                url = f"{base_url.rstrip('/')}{url}"
+            cleaned.append({
+                "name": str(o.get("name", "")),
+                "url": url,
+                "price": _safe_int(o.get("price")),
+                "price_old": _safe_int(o.get("price_old")),
+                "is_available": o.get("is_available"),
+                "sku": o.get("sku"),
+                "image_url": o.get("image_url"),
+                "characteristics": None,
+            })
+        return cleaned
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse Claude response as JSON: {e}")
         return []
     except Exception as e:
-        logger.error(f"Claude API call failed: {e}")
+        logger.error(f"Claude response processing failed: {e}")
         return []
 
 

@@ -90,8 +90,10 @@ async def _run_task_inner(task_id: int, SessionLocal) -> None:
             wait_for = await get_setting_int(db, "firecrawl_wait_for", 2000)
             cache_ttl = await get_setting_int(db, "cache_ttl_days", 7)
             debug_mode = await get_setting_bool(db, "debug_mode", False)
+            debug_max_offers = 10  # hard limit in debug mode
             if debug_mode:
-                max_pages = min(max_pages, await get_setting_int(db, "debug_max_api_calls", 3))
+                max_pages = 1  # hard limit: 1 page only
+                logger.info(f"Task {task_id}: DEBUG MODE — max 1 page, max {debug_max_offers} offers")
 
             keywords = await load_category_keywords(db)
             segments = await load_price_segments(db)
@@ -147,6 +149,8 @@ async def _run_task_inner(task_id: int, SessionLocal) -> None:
                 page_offers = await parse_offers(text, base_url)
                 if not page_offers:
                     break
+                if debug_mode and len(page_offers) > debug_max_offers:
+                    page_offers = page_offers[:debug_max_offers]
 
                 for item in page_offers:
                     existing = None

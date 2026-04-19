@@ -129,7 +129,7 @@ def _log_change(
 
 # --- Endpoints ---
 
-@router.get("", response_model=OfferListResponse)
+@router.get("")
 async def list_offers(
     company_id: Optional[int] = None,
     region_id: Optional[int] = None,
@@ -140,26 +140,56 @@ async def list_offers(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = select(Offer)
-    count_q = select(func.count(Offer.id))
+    import traceback
+    try:
+        q = select(Offer)
+        count_q = select(func.count(Offer.id))
 
-    if company_id:
-        q = q.where(Offer.company_id == company_id)
-        count_q = count_q.where(Offer.company_id == company_id)
-    if region_id:
-        q = q.where(Offer.region_id == region_id)
-        count_q = count_q.where(Offer.region_id == region_id)
-    if category_id:
-        q = q.where(Offer.category_id == category_id)
-        count_q = count_q.where(Offer.category_id == category_id)
-    if uncategorized_only:
-        q = q.where(Offer.category_id == None)
-        count_q = count_q.where(Offer.category_id == None)
+        if company_id:
+            q = q.where(Offer.company_id == company_id)
+            count_q = count_q.where(Offer.company_id == company_id)
+        if region_id:
+            q = q.where(Offer.region_id == region_id)
+            count_q = count_q.where(Offer.region_id == region_id)
+        if category_id:
+            q = q.where(Offer.category_id == category_id)
+            count_q = count_q.where(Offer.category_id == category_id)
+        if uncategorized_only:
+            q = q.where(Offer.category_id == None)
+            count_q = count_q.where(Offer.category_id == None)
 
-    total = (await db.execute(count_q)).scalar() or 0
-    q = q.order_by(Offer.collected_at.desc()).offset(offset).limit(limit)
-    result = await db.execute(q)
-    return OfferListResponse(items=result.scalars().all(), total=total)
+        total = (await db.execute(count_q)).scalar() or 0
+        q = q.order_by(Offer.collected_at.desc()).offset(offset).limit(limit)
+        result = await db.execute(q)
+        offers = result.scalars().all()
+
+        # Build dicts manually to avoid Pydantic type strictness
+        items = []
+        for o in offers:
+            items.append({
+                "id": o.id,
+                "company_id": o.company_id,
+                "region_id": o.region_id,
+                "name": o.name,
+                "url": o.url,
+                "sku": o.sku,
+                "price": o.price,
+                "price_old": o.price_old,
+                "is_available": o.is_available,
+                "image_url": o.image_url,
+                "characteristics": o.characteristics,
+                "category_id": o.category_id,
+                "category_source": o.category_source.value if o.category_source else "auto",
+                "price_segment_id": o.price_segment_id,
+                "segment_source": o.segment_source.value if o.segment_source else "auto",
+                "source": o.source.value if o.source else "manual",
+                "collected_at": o.collected_at.isoformat() if o.collected_at else None,
+                "batch_id": o.batch_id,
+            })
+        return {"items": items, "total": total}
+    except Exception as e:
+        logger.error(f"list_offers failed: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)[:300]}")
 
 
 @router.post("", response_model=OfferOut, status_code=201)

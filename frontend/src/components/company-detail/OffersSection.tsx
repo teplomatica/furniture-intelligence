@@ -32,6 +32,14 @@ interface ScrapeTask {
   error_message: string | null;
   retailer_category_name: string | null;
   region_name: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+interface TasksResponse {
+  items: ScrapeTask[];
+  total: number;
 }
 
 interface Props {
@@ -79,7 +87,10 @@ export function OffersSection({
   const [bulkSaving, setBulkSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [tasks, setTasks] = useState<ScrapeTask[]>([]);
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [tasksTotal, setTasksTotal] = useState(0);
+  const [tasksPage, setTasksPage] = useState(0);
+  const [hideCancelled, setHideCancelled] = useState(false);
+  const tasksPageSize = 10;
 
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const regionById = Object.fromEntries(regions.map((r) => [r.id, r]));
@@ -88,10 +99,16 @@ export function OffersSection({
   // Polling for active tasks
   const loadTasks = useCallback(async () => {
     try {
-      const res = await api.get<ScrapeTask[]>(`/companies/${companyId}/scrape-tasks`);
-      setTasks(res);
+      const params = new URLSearchParams({
+        limit: String(tasksPageSize),
+        offset: String(tasksPage * tasksPageSize),
+      });
+      if (hideCancelled) params.set("hide_cancelled", "true");
+      const res = await api.get<TasksResponse>(`/companies/${companyId}/scrape-tasks?${params}`);
+      setTasks(res.items);
+      setTasksTotal(res.total);
     } catch {}
-  }, [companyId]);
+  }, [companyId, tasksPage, hideCancelled]);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
 
@@ -154,8 +171,16 @@ export function OffersSection({
     await loadTasks();
   };
 
-  const visibleTasks = showCompleted ? tasks : tasks.filter((t) => t.status === "queued" || t.status === "running");
+  const visibleTasks = tasks;
   const hasActiveTasks = tasks.some((t) => t.status === "queued" || t.status === "running");
+  const tasksTotalPages = Math.ceil(tasksTotal / tasksPageSize);
+
+  const fmtDate = (iso: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   return (
     <section className="bg-white rounded-lg border mb-4">
@@ -204,15 +229,16 @@ export function OffersSection({
       </div>
 
       {/* Tasks panel */}
-      {visibleTasks.length > 0 && (
+      {(visibleTasks.length > 0 || tasksTotal > 0) && (
         <div className="px-4 py-3 border-b bg-gray-50/30">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-600">{"Задачи парсинга"}</span>
+            <span className="text-xs font-medium text-gray-600">{`Задачи парсинга (${tasksTotal})`}</span>
             <div className="flex items-center gap-3 text-[11px] text-gray-400">
               {hasActiveTasks && <span>{"обновление каждые 2 сек"}</span>}
-              <button onClick={() => setShowCompleted(!showCompleted)} className="hover:text-gray-600">
-                {showCompleted ? "Скрыть завершённые" : "Показать все"}
-              </button>
+              <label className="flex items-center gap-1 cursor-pointer hover:text-gray-600">
+                <input type="checkbox" checked={hideCancelled} onChange={(e) => { setHideCancelled(e.target.checked); setTasksPage(0); }} />
+                {"Скрыть отменённые"}
+              </label>
             </div>
           </div>
           <div className="space-y-1">
@@ -229,6 +255,7 @@ export function OffersSection({
                     {t.status === "cancelled" && <span className="text-gray-400">{"\u2715"}</span>}
                     {t.status === "failed" && <span className="text-red-500">{"\u26A0"}</span>}
                   </span>
+                  <span className="text-gray-400 text-[10px] font-mono w-20">{fmtDate(t.created_at)}</span>
                   <span className="w-44 truncate">{label}</span>
                   {isRunning && (
                     <div className="flex-1 h-1.5 bg-gray-100 rounded overflow-hidden">
@@ -255,6 +282,15 @@ export function OffersSection({
               );
             })}
           </div>
+          {tasksTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-1 mt-2 text-xs">
+              <button onClick={() => setTasksPage(tasksPage - 1)} disabled={tasksPage === 0}
+                className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30">{"\u2190"}</button>
+              <span className="text-gray-500 px-2">{`${tasksPage + 1} / ${tasksTotalPages}`}</span>
+              <button onClick={() => setTasksPage(tasksPage + 1)} disabled={tasksPage >= tasksTotalPages - 1}
+                className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30">{"\u2192"}</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -275,8 +311,11 @@ export function OffersSection({
       )}
 
       {/* Offers table */}
+      <div className="px-4 py-2 text-xs text-gray-400 border-b bg-gray-50/30">
+        {`Ниже \u2014 собранные товары (${total})`}
+      </div>
       {offers.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-gray-400">{"Нет офферов. Нажмите \u00ABНачать парсинг\u00BB для сбора данных."}</div>
+        <div className="px-4 py-6 text-center text-sm text-gray-400">{"Нет офферов. Нажмите \u00ABНачать парсинг\u00BB для сбора данных. Результаты появятся ниже по мере завершения задач."}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

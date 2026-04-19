@@ -166,17 +166,28 @@ async def cancel_all_scrape_tasks(
     return {"cancelled": len(tasks)}
 
 
-@router.get("/companies/{company_id}/scrape-tasks", response_model=list[ScrapeTaskOut])
+@router.get("/companies/{company_id}/scrape-tasks")
 async def list_scrape_tasks(
     company_id: int,
     active_only: bool = False,
+    hide_cancelled: bool = False,
+    limit: int = 20,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = select(ScrapeTask).where(ScrapeTask.company_id == company_id)
+    from sqlalchemy import func
+    q_base = select(ScrapeTask).where(ScrapeTask.company_id == company_id)
     if active_only:
-        q = q.where(ScrapeTask.status.in_([ScrapeTaskStatus.queued, ScrapeTaskStatus.running]))
-    q = q.order_by(ScrapeTask.created_at.desc()).limit(100)
+        q_base = q_base.where(ScrapeTask.status.in_([ScrapeTaskStatus.queued, ScrapeTaskStatus.running]))
+    if hide_cancelled:
+        q_base = q_base.where(ScrapeTask.status != ScrapeTaskStatus.cancelled)
+
+    # Total count
+    count_res = await db.execute(select(func.count()).select_from(q_base.subquery()))
+    total = count_res.scalar() or 0
+
+    q = q_base.order_by(ScrapeTask.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(q)
     tasks = result.scalars().all()
 
@@ -192,7 +203,7 @@ async def list_scrape_tasks(
         item.retailer_category_name = rcs.get(t.retailer_category_id).name if rcs.get(t.retailer_category_id) else None
         item.region_name = regs.get(t.region_id).name if regs.get(t.region_id) else None
         out.append(item)
-    return out
+    return {"items": out, "total": total}
 
 
 @router.post("/scrape-tasks/{task_id}/cancel", status_code=204)
