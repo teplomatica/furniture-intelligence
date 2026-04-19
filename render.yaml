@@ -29,7 +29,7 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A app.core.celery_app worker --loglevel=info --concurrency=3
+    startCommand: celery -A app.core.celery_app worker --loglevel=info --pool=threads --concurrency=3
     envVars:
       - key: DATABASE_URL
         sync: false

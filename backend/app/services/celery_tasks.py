@@ -5,10 +5,11 @@ from datetime import datetime
 from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.celery_app import celery_app
-from app.core.database import async_session_maker
+from app.core.config import settings as app_settings
 from app.models.company import Company
 from app.models.retailer_category import RetailerCategory
 from app.models.scrape_task import ScrapeTask, ScrapeTaskStatus
@@ -33,8 +34,17 @@ def _build_paginated_url(url: str, page: int) -> str:
 
 
 async def _run_task(task_id: int) -> None:
-    """Core async logic — runs in asyncio event loop."""
-    async with async_session_maker() as db:
+    """Core async logic — runs in asyncio event loop with its own engine (no pool)."""
+    engine = create_async_engine(app_settings.database_url, poolclass=NullPool)
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        await _run_task_inner(task_id, SessionLocal)
+    finally:
+        await engine.dispose()
+
+
+async def _run_task_inner(task_id: int, SessionLocal) -> None:
+    async with SessionLocal() as db:
         task: ScrapeTask | None = await db.get(ScrapeTask, task_id)
         if not task:
             logger.error(f"ScrapeTask {task_id} not found")
