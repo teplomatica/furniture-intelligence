@@ -15,6 +15,8 @@ from app.models.offer import (
 from app.models.setting import Setting
 from app.models.channel import Channel, PositioningRef
 from app.models.company_mapping import CompanyCategoryMapping, CompanyRegionMapping, CompanyScrapeMatrix
+from app.models.retailer_category import RetailerCategory
+from app.models.scrape_task import ScrapeTask, ScrapeTaskStatus
 
 __all__ = [
     "User", "UserRole", "UserStatus",

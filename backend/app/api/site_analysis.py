@@ -83,32 +83,48 @@ async def apply_analysis(
     }
     region_method = method_map.get(body.region_method, RegionMethod.none)
 
-    # 1. Create category mappings
+    # 1. Create retailer_categories + mappings
+    from app.models.retailer_category import RetailerCategory
+
     cat_created = 0
-    mapped_category_ids = set()
+    mapped_retailer_cat_ids = set()
     for cat in body.categories:
         url = cat.site_url
         if url.startswith("/"):
             url = f"{base_url}{url}"
-        cat_id = cat.our_category_id
-        if not cat_id:
-            continue
+        site_name = cat.site_name or url.rstrip("/").split("/")[-1] or "Без названия"
 
-        mapped_category_ids.add(cat_id)
-
-        # Check if mapping already exists
-        existing = await db.execute(
-            select(CompanyCategoryMapping).where(
-                CompanyCategoryMapping.company_id == company_id,
-                CompanyCategoryMapping.category_id == cat_id,
-                CompanyCategoryMapping.retailer_url == url,
+        # Find or create retailer_category (flat — no parent for now)
+        existing_rc = await db.execute(
+            select(RetailerCategory).where(
+                RetailerCategory.company_id == company_id,
+                RetailerCategory.parent_id.is_(None),
+                RetailerCategory.name == site_name,
             )
         )
-        if not existing.scalar_one_or_none():
+        rc = existing_rc.scalar_one_or_none()
+        if not rc:
+            rc = RetailerCategory(company_id=company_id, name=site_name, url=url)
+            db.add(rc)
+            await db.flush()
+        else:
+            rc.url = url
+        mapped_retailer_cat_ids.add(rc.id)
+
+        # Create mapping (retailer_category → our_category)
+        our_cat_id = cat.our_category_id
+        existing_map = await db.execute(
+            select(CompanyCategoryMapping).where(
+                CompanyCategoryMapping.company_id == company_id,
+                CompanyCategoryMapping.retailer_category_id == rc.id,
+            )
+        )
+        if not existing_map.scalar_one_or_none():
             db.add(CompanyCategoryMapping(
                 company_id=company_id,
-                category_id=cat_id,
-                retailer_name=cat.site_name,
+                category_id=our_cat_id,
+                retailer_category_id=rc.id,
+                retailer_name=site_name,
                 retailer_url=url,
             ))
             cat_created += 1
@@ -144,21 +160,21 @@ async def apply_analysis(
             ))
             reg_created += 1
 
-    # 3. Create scrape matrix (all combinations enabled)
+    # 3. Create scrape matrix (retailer_category × region)
     matrix_created = 0
-    for cat_id in mapped_category_ids:
+    for rc_id in mapped_retailer_cat_ids:
         for reg_id in mapped_region_ids:
             existing = await db.execute(
                 select(CompanyScrapeMatrix).where(
                     CompanyScrapeMatrix.company_id == company_id,
-                    CompanyScrapeMatrix.category_id == cat_id,
+                    CompanyScrapeMatrix.retailer_category_id == rc_id,
                     CompanyScrapeMatrix.region_id == reg_id,
                 )
             )
             if not existing.scalar_one_or_none():
                 db.add(CompanyScrapeMatrix(
                     company_id=company_id,
-                    category_id=cat_id,
+                    retailer_category_id=rc_id,
                     region_id=reg_id,
                     enabled=True,
                 ))

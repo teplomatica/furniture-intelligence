@@ -9,7 +9,8 @@
 - **AI:** Claude Haiku (извлечение товаров, анализ сайтов, поиск юрлиц)
 - **Scraping:** Firecrawl API (JS-рендеринг), кэш 7 дней
 - **External API:** DataNewton (юрлица, финансы)
-- **Deploy:** Render (backend + frontend)
+- **Queue:** Celery + Redis (отдельный worker service на Render)
+- **Deploy:** Render (backend web + Celery worker + frontend + Redis)
 - **Repo:** GitHub teplomatica/furniture-intelligence
 
 ## Структура проекта
@@ -56,6 +57,8 @@ Shared PostgreSQL с DivanPOHelper. ВСЕ таблицы ОБЯЗАТЕЛЬНО
 | fi_company_scrape_matrix | Матрица парсинга (category × region) |
 | fi_settings | Runtime настройки (key-value) |
 | fi_scrape_cache | Кэш скрапинга (7-day TTL) |
+| fi_retailer_categories | Справочник категорий ритейлера per company (2-уровневая иерархия) |
+| fi_scrape_tasks | Задачи парсинга (retailer_category × region, Celery-driven) |
 
 ## Важные архитектурные решения
 

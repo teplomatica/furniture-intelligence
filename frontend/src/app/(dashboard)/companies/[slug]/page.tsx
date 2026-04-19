@@ -285,7 +285,6 @@ export default function CompanyDetailPage() {
       <FinancialsSection
         entities={entities}
         financials={financials}
-        onAdd={() => { setEditFinancial(null); setFinFormOpen(true); }}
         onEdit={(f) => { setEditFinancial(f); setFinFormOpen(true); }}
       />
 
@@ -319,7 +318,6 @@ export default function CompanyDetailPage() {
         regions={regions}
         categories={categories}
         companyId={company.id}
-        onAdd={() => { setEditOffer(null); setOfferFormOpen(true); }}
         onEdit={(o) => { setEditOffer(o); setOfferFormOpen(true); }}
         onReload={() => { if (company) loadOffers(company.id); }}
         filterRegionId={offerRegionId}

@@ -21,7 +21,6 @@ interface Financial {
 interface Props {
   entities: LegalEntity[];
   financials: Financial[];
-  onAdd: () => void;
   onEdit: (record: Financial) => void;
 }
 
@@ -30,7 +29,7 @@ function fmt(v: number | null): string {
   return v.toLocaleString("ru-RU");
 }
 
-export function FinancialsSection({ entities, financials, onAdd, onEdit }: Props) {
+export function FinancialsSection({ entities, financials, onEdit }: Props) {
   const finByLe = financials.reduce<Record<number, Financial[]>>((acc, f) => {
     (acc[f.legal_entity_id] ||= []).push(f);
     return acc;
@@ -40,12 +39,7 @@ export function FinancialsSection({ entities, financials, onAdd, onEdit }: Props
     <section className="bg-white rounded-lg border mb-4">
       <div className="px-4 py-3 flex items-center justify-between border-b bg-gray-50 rounded-t-lg">
         <h2 className="font-semibold text-gray-700">Финансы</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-400">{financials.length} записей</span>
-          <button onClick={onAdd} className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-            + Добавить
-          </button>
-        </div>
+        <span className="text-xs text-gray-400">{financials.length} записей</span>
       </div>
       {entities.length === 0 ? (
         <div className="px-4 py-6 text-center text-sm text-gray-400">

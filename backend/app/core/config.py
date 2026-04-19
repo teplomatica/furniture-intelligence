@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     datanewton_base_url: str = "https://api.datanewton.ru/v1"
     firecrawl_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    redis_url: str = "redis://localhost:6379/0"
 
     @field_validator("database_url", mode="before")
     @classmethod

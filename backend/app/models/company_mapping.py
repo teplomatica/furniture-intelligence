@@ -8,7 +8,7 @@ from app.models.offer import RegionMethod
 
 
 class CompanyCategoryMapping(Base):
-    """Maps our category to retailer's category URL(s)."""
+    """Maps retailer_category → our category. retailer_category_id required, category_id optional."""
     __tablename__ = "fi_company_category_mapping"
     __table_args__ = (
         UniqueConstraint("company_id", "category_id", "retailer_url", name="uq_company_cat_url"),
@@ -16,7 +16,8 @@ class CompanyCategoryMapping(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
-    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_categories.id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_categories.id"), nullable=True)
+    retailer_category_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_retailer_categories.id", ondelete="CASCADE"), nullable=True)
     retailer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     retailer_url: Mapped[str] = mapped_column(String(1000), nullable=False)
 
@@ -46,6 +47,7 @@ class CompanyScrapeMatrix(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_companies.id"), nullable=False)
-    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_categories.id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_categories.id"), nullable=True)
+    retailer_category_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fi_retailer_categories.id", ondelete="CASCADE"), nullable=True)
     region_id: Mapped[int] = mapped_column(Integer, ForeignKey("fi_regions.id"), nullable=False)
     enabled: Mapped[bool] = mapped_column(default=True)

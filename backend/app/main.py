@@ -12,7 +12,7 @@ from app.api import (
     assortment, regions, offers, company_region_config,
 )
 from app.api import settings as settings_api
-from app.api import scrape_test, site_analysis, dashboard, company_mappings, channels
+from app.api import scrape_test, site_analysis, dashboard, company_mappings, channels, retailer_categories, scrape_tasks
 
 
 async def create_superadmin():
@@ -38,6 +38,13 @@ async def migrate_add_columns():
         ("fi_companies", "websites", "JSON"),
         ("fi_companies", "channel_id", "INTEGER"),
         ("fi_companies", "positioning_id", "INTEGER"),
+        ("fi_company_category_mapping", "retailer_category_id", "INTEGER"),
+        ("fi_company_scrape_matrix", "retailer_category_id", "INTEGER"),
+    ]
+    # Allow NULL on existing NOT NULL columns that became optional
+    null_migrations = [
+        ("fi_company_category_mapping", "category_id"),
+        ("fi_company_scrape_matrix", "category_id"),
     ]
     async with engine.begin() as conn:
         for table, column, col_type in migrations:
@@ -46,7 +53,12 @@ async def migrate_add_columns():
                     f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
                 ))
             except Exception:
-                pass  # column already exists or other DB
+                pass
+        for table, column in null_migrations:
+            try:
+                await conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL"))
+            except Exception:
+                pass
 
 
 @asynccontextmanager
@@ -86,6 +98,8 @@ app.include_router(site_analysis.router)
 app.include_router(dashboard.router)
 app.include_router(company_mappings.router)
 app.include_router(channels.router)
+app.include_router(retailer_categories.router)
+app.include_router(scrape_tasks.router)
 
 
 @app.get("/health")
