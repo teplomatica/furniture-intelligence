@@ -25,7 +25,7 @@ backend/
     seed.py       — Начальные данные (16 компаний, 8 категорий, 6 регионов, 7 settings)
 frontend/
   src/
-    app/(dashboard)/  — Страницы (dashboard, companies, categories, regions, settings, wiki)
+    app/(dashboard)/  — Страницы (dashboard, companies, references, users, settings, wiki)
     components/       — UI компоненты
       company-detail/ — Секции детальной страницы компании
     lib/              — api.ts, sse.ts
@@ -39,14 +39,16 @@ Shared PostgreSQL с DivanPOHelper. ВСЕ таблицы ОБЯЗАТЕЛЬНО
 
 | Таблица | Назначение |
 |---------|-----------|
-| fi_companies | Конкуренты (is_self=True для Divan.ru) |
+| fi_companies | Конкуренты (is_self=True для Divan.ru, channel_id + positioning_id FKs, websites JSON) |
+| fi_channels | Каналы (Федеральные, Онлайн, Премиум, Маркетплейсы) — редактируемый справочник |
+| fi_positionings | Позиционирование (Бюджет, Средний, Премиум) — редактируемый справочник |
 | fi_legal_entities | Юрлица (cascade delete к financials) |
 | fi_competitor_financials | Выручка, прибыль, EBITDA по годам |
 | fi_competitor_traffic | Веб-трафик по месяцам |
 | fi_competitor_assortment | Агрегат SKU/цены |
-| fi_categories | 3-уровневая иерархия (8 корневых) |
-| fi_price_segments | Бюджет/Средний/Премиум per category |
-| fi_regions | 6 регионов |
+| fi_categories | 3-уровневая иерархия: категория → подкатегория → (price_segments level 3) |
+| fi_price_segments | Ценовые сегменты per category (мин/макс цена) |
+| fi_regions | Регионы для анализа |
 | fi_offers | Товарные офферы (двухслойная категоризация auto/manual) |
 | fi_offer_category_log | История назначений категорий |
 | fi_company_category_mapping | Наша категория → URL ритейлера |
@@ -75,6 +77,9 @@ Shared PostgreSQL с DivanPOHelper. ВСЕ таблицы ОБЯЗАТЕЛЬНО
 
 ### Аутентификация
 JWT, 4 роли: superadmin > admin > editor > viewer. Write = editor+. Settings = admin+.
+- Регистрация: `POST /auth/register` — создаёт пользователя со status=inactive
+- Активация: admin через `/users` page (PATCH /auth/users/{id}/activate)
+- Inactive пользователи не могут войти
 
 ## Команды
 
@@ -100,11 +105,19 @@ npm run build
 
 ## Текущее состояние
 
-- 16 компаний (вкл. Divan.ru is_self), 8 категорий, 6 регионов
-- Dashboard: финансовая таблица YoY (Выручка/EBITDA/Прибыль), сортировка
-- Company detail: ЮЛ, финансы, трафик, ассортимент, ScrapeConfigPanel (3 tabs), офферы
+- 16 компаний (вкл. Divan.ru is_self), 8 категорий, 6 регионов, 4 канала, 3 позиционирования
+- Sidebar: Дашборд, Конкуренты, Справочники, Пользователи, Настройки, Справка
+- Dashboard: финансовая таблица YoY (Выручка/EBITDA/Прибыль), сортировка (А-Я/выручка/EBITDA/прибыль)
+- Divan.ru (is_self) закреплён вверху дашборда с бейджем "Мы"
+- Company detail: ЮЛ (cascade delete, edit inline), финансы (DataNewton read-only), трафик, ассортимент, ScrapeConfigPanel (3 tabs: категории/регионы/матрица), офферы
+- Компании: поддержка нескольких сайтов (websites JSON), delete с каскадом
+- References page: единый справочник с 4 вкладками (Каналы, Позиционирование, Регионы, Категории)
+- Категории: 3-уровневое дерево с полным CRUD на каждом уровне
+- Channels/Positionings: редактируемые справочники (заменили enum)
+- Bulk edit: массовое изменение канала/позиционирования на странице компаний
+- Users: регистрация → активация админом; страница /users для управления
 - Автонастройка: Site Analysis Wizard (LLM → категории + регионы → матрица)
-- Offer parser: Claude Haiku LLM extraction
-- Legal entity search: DataNewton first → Firecrawl+Claude AI fallback
-- Wiki: /wiki — полная документация проекта
-- Settings: debug mode, cache TTL, rate limits
+- Offer parser: Claude Haiku LLM extraction (вместо regex)
+- Legal entity search: DataNewton first (name → domain) → Firecrawl+Claude AI fallback
+- Wiki: /wiki — 5 секций документации
+- Settings: debug mode (limits Firecrawl calls), cache TTL, rate limits

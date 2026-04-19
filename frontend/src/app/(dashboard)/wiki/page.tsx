@@ -152,8 +152,8 @@ function ArchitectureSection() {
 ├── frontend/
 │   ├── src/
 │   │   ├── app/(dashboard)/       # Страницы
-│   │   │   ├── dashboard/, companies/, categories/
-│   │   │   ├── regions/, settings/, wiki/
+│   │   │   ├── dashboard/, companies/, references/
+│   │   │   ├── users/, settings/, wiki/
 │   │   ├── components/
 │   │   │   ├── company-detail/    # Секции компании
 │   │   │   │   ├── ScrapeConfigPanel.tsx (3 tabs)
@@ -230,10 +230,23 @@ function FeaturesSection() {
         <li><strong>Обновить данные:</strong> SSE refresh panel (юрлица, финансы, офферы)</li>
       </ul>
 
-      <H2>Справочники</H2>
+      <H2>Справочники (/references)</H2>
       <P>
-        <strong>Категории</strong> — 3-уровневая иерархия с ценовыми сегментами.
-        <strong> Регионы</strong> — 6 городов для регионального анализа.
+        Единая страница с 4 вкладками для управления справочниками:
+      </P>
+      <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1 mb-4">
+        <li><strong>Каналы:</strong> типы ритейлеров (Федеральные, Онлайн, Премиум, Маркетплейсы) — редактируемый справочник</li>
+        <li><strong>Позиционирование:</strong> Бюджет / Средний / Премиум — редактируемый справочник</li>
+        <li><strong>Регионы:</strong> города для регионального анализа (city_firecrawl для маппинга)</li>
+        <li><strong>Категории:</strong> 3-уровневое дерево — Категория → Подкатегория → Ценовой сегмент (мин/макс цена)</li>
+      </ul>
+      <P>Все справочники поддерживают добавление, редактирование и удаление. Поле sort_order управляет порядком отображения.</P>
+
+      <H2>Пользователи (/users)</H2>
+      <P>
+        Открытая регистрация на /register — новый пользователь создаётся со статусом inactive.
+        Администратор активирует учётную запись на странице /users. До активации вход невозможен.
+        Роли: superadmin, admin, editor, viewer.
       </P>
 
       <H2>Настройки</H2>
@@ -308,6 +321,27 @@ function ReleasesSection() {
   return (
     <div>
       <H1>Release Notes</H1>
+
+      <H2>v0.9 — References + User Management (2026-04-18)</H2>
+      <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1 mb-4">
+        <li>Единый справочник /references с 4 вкладками (Каналы, Позиционирование, Регионы, Категории)</li>
+        <li>3-уровневое дерево категорий: Категория → Подкатегория → Ценовой сегмент с полным CRUD</li>
+        <li>Каналы и Позиционирование — редактируемые справочники (заменили enum)</li>
+        <li>Массовое редактирование компаний: чекбоксы + toolbar (Канал, Позиционирование)</li>
+        <li>Регистрация пользователей с активацией администратором, страница /users</li>
+        <li>Удаление компаний (cascade), защита Divan.ru (is_self) от удаления</li>
+        <li>Поддержка нескольких сайтов на компанию (websites JSON)</li>
+        <li>CLAUDE.md для автоматического чтения Claude Code</li>
+      </ul>
+
+      <H2>v0.8 — LLM Legal Entity Extraction (2026-04-15)</H2>
+      <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1 mb-4">
+        <li>Поиск юрлиц: DataNewton first (name → domain) → Firecrawl + Claude AI fallback</li>
+        <li>Замена regex на Claude Haiku для извлечения ИНН/ОГРН/названия</li>
+        <li>Редактирование юрлиц inline, auto-primary для первого ЮЛ</li>
+        <li>Inline редактирование в ScrapeConfigPanel (категории и регионы)</li>
+        <li>Wiki — полная документация проекта</li>
+      </ul>
 
       <H2>v0.7 — Mapping Architecture (2026-04-15)</H2>
       <ul className="list-disc pl-5 text-sm text-gray-600 space-y-1 mb-4">

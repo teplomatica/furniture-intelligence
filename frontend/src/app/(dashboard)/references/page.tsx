@@ -286,6 +286,11 @@ function RefForm({ open, onClose, onSaved, editItem, formType, categories }: {
           <label className="block text-sm font-medium text-gray-700 mb-1">{"Slug"}</label>
           <input value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{"Порядок сортировки"}</label>
+          <input type="number" value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))}
+            className="w-full px-3 py-2 border rounded-lg text-sm" />
+        </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600">{"Отмена"}</button>
           <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">
