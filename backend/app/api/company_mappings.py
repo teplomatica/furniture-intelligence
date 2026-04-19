@@ -23,14 +23,16 @@ router = APIRouter(tags=["company_mappings"])
 class CategoryMappingOut(BaseModel):
     id: int
     company_id: int
-    category_id: int
+    category_id: Optional[int]
+    retailer_category_id: Optional[int] = None
     retailer_name: Optional[str]
     retailer_url: str
     model_config = {"from_attributes": True}
 
 
 class CategoryMappingCreate(BaseModel):
-    category_id: int
+    category_id: Optional[int] = None
+    retailer_category_id: Optional[int] = None
     retailer_name: Optional[str] = None
     retailer_url: str
 
@@ -59,7 +61,8 @@ class RegionMappingUpdate(BaseModel):
 
 
 class ScrapeMatrixItem(BaseModel):
-    category_id: int
+    category_id: Optional[int] = None
+    retailer_category_id: Optional[int] = None
     region_id: int
     enabled: bool
     model_config = {"from_attributes": True}
@@ -68,7 +71,8 @@ class ScrapeMatrixItem(BaseModel):
 class ScrapeMatrixOut(BaseModel):
     id: int
     company_id: int
-    category_id: int
+    category_id: Optional[int]
+    retailer_category_id: Optional[int] = None
     region_id: int
     enabled: bool
     model_config = {"from_attributes": True}
@@ -115,6 +119,7 @@ async def create_category_mapping(
 
 class CategoryMappingUpdate(BaseModel):
     category_id: Optional[int] = None
+    retailer_category_id: Optional[int] = None
     retailer_name: Optional[str] = None
     retailer_url: Optional[str] = None
 
