@@ -102,11 +102,24 @@ async def start_scrape_tasks(
 
     from app.services.celery_tasks import scrape_offers_task
 
+    # Find cells that already have an active (queued/running) task — skip them
+    active_res = await db.execute(
+        select(ScrapeTask.retailer_category_id, ScrapeTask.region_id).where(
+            ScrapeTask.company_id == company_id,
+            ScrapeTask.status.in_([ScrapeTaskStatus.queued, ScrapeTaskStatus.running]),
+        )
+    )
+    active_pairs = {(rc, rg) for rc, rg in active_res.all()}
+
     created = 0
     skipped = 0
+    already_active = 0
     for cell in cells:
         if not cell.retailer_category_id:
             skipped += 1
+            continue
+        if (cell.retailer_category_id, cell.region_id) in active_pairs:
+            already_active += 1
             continue
         task = ScrapeTask(
             company_id=company_id,
@@ -122,12 +135,35 @@ async def start_scrape_tasks(
 
     await db.commit()
 
-    if created == 0:
+    if created == 0 and already_active == 0:
         raise HTTPException(
             status_code=400,
             detail=f"Не удалось создать задачи. Ячеек: {len(cells)}, пропущено: {skipped}. Убедитесь что для категорий указаны URL."
         )
-    return {"created": created, "skipped": skipped, "backfilled": backfilled}
+    return {"created": created, "skipped": skipped, "already_active": already_active, "backfilled": backfilled}
+
+
+@router.post("/companies/{company_id}/scrape-tasks/cancel-all", response_model=dict)
+async def cancel_all_scrape_tasks(
+    company_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    """Cancel all active (queued/running) tasks for a company."""
+    result = await db.execute(
+        select(ScrapeTask).where(
+            ScrapeTask.company_id == company_id,
+            ScrapeTask.status.in_([ScrapeTaskStatus.queued, ScrapeTaskStatus.running]),
+        )
+    )
+    tasks = result.scalars().all()
+    for task in tasks:
+        if task.celery_task_id:
+            celery_app.control.revoke(task.celery_task_id, terminate=False)
+        task.status = ScrapeTaskStatus.cancelled
+        task.finished_at = datetime.utcnow()
+    await db.commit()
+    return {"cancelled": len(tasks)}
 
 
 @router.get("/companies/{company_id}/scrape-tasks", response_model=list[ScrapeTaskOut])

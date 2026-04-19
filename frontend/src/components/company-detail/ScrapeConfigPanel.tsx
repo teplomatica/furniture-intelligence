@@ -56,6 +56,7 @@ export function ScrapeConfigPanel({
   const [saving, setSaving] = useState(false);
   const [editingCat, setEditingCat] = useState<number | null>(null);
   const [editingReg, setEditingReg] = useState<number | null>(null);
+  const [localMatrix, setLocalMatrix] = useState<Record<string, boolean>>({});
 
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const regById = Object.fromEntries(regions.map((r) => [r.id, r]));
@@ -88,24 +89,40 @@ export function ScrapeConfigPanel({
     onReload();
   };
 
-  const handleToggleMatrix = async (catId: number, regId: number) => {
-    const current = matrixMap[matrixKey(catId, regId)] ?? true;
-    setSaving(true);
-    await api.patch(`/companies/${companyId}/scrape-matrix`, {
-      items: [{ category_id: catId, region_id: regId, enabled: !current }],
-    });
-    onReload();
-    setSaving(false);
+  const getMatrixValue = (catId: number, regId: number): boolean => {
+    const k = matrixKey(catId, regId);
+    if (k in localMatrix) return localMatrix[k];
+    return matrixMap[k] ?? false;
   };
 
-  const handleSetAll = async (enabled: boolean) => {
-    setSaving(true);
+  const handleToggleMatrix = (catId: number, regId: number) => {
+    const k = matrixKey(catId, regId);
+    const current = getMatrixValue(catId, regId);
+    const next = !current;
+    // Optimistic: update local state immediately
+    setLocalMatrix((prev) => ({ ...prev, [k]: next }));
+    // Fire and forget — no reload on success
+    api.patch(`/companies/${companyId}/scrape-matrix`, {
+      items: [{ category_id: catId, region_id: regId, enabled: next }],
+    }).catch(() => {
+      // Revert on error
+      setLocalMatrix((prev) => ({ ...prev, [k]: current }));
+    });
+  };
+
+  const handleSetAll = (enabled: boolean) => {
+    // Optimistic: update all locally
+    const updates: Record<string, boolean> = {};
+    matrixCats.forEach((catId) => {
+      matrixRegs.forEach((regId) => {
+        updates[matrixKey(catId, regId)] = enabled;
+      });
+    });
+    setLocalMatrix((prev) => ({ ...prev, ...updates }));
     const items = matrixCats.flatMap((catId) =>
       matrixRegs.map((regId) => ({ category_id: catId, region_id: regId, enabled }))
     );
-    await api.patch(`/companies/${companyId}/scrape-matrix`, { items });
-    onReload();
-    setSaving(false);
+    api.patch(`/companies/${companyId}/scrape-matrix`, { items }).catch(() => onReload());
   };
 
   const totalEnabled = matrix.filter((m) => m.enabled).length;
@@ -269,12 +286,12 @@ export function ScrapeConfigPanel({
           ) : (
             <>
               <div className="flex gap-2 mb-3">
-                <button onClick={() => handleSetAll(true)} disabled={saving}
-                  className="text-xs px-2 py-1 bg-green-50 text-green-600 rounded hover:bg-green-100 disabled:opacity-50">
+                <button onClick={() => handleSetAll(true)}
+                  className="text-xs px-2 py-1 bg-green-50 text-green-600 rounded hover:bg-green-100">
                   Выбрать все
                 </button>
-                <button onClick={() => handleSetAll(false)} disabled={saving}
-                  className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100 disabled:opacity-50">
+                <button onClick={() => handleSetAll(false)}
+                  className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100">
                   Снять все
                 </button>
                 <span className="text-xs text-gray-400 ml-2">{totalEnabled} из {matrixCats.length * matrixRegs.length} активно</span>
@@ -296,12 +313,11 @@ export function ScrapeConfigPanel({
                       <tr key={catId} className="border-t border-gray-50">
                         <td className="px-3 py-2 font-medium text-sm">{catById[catId]?.name ?? `#${catId}`}</td>
                         {matrixRegs.map((regId) => {
-                          const enabled = matrixMap[matrixKey(catId, regId)] ?? false;
+                          const enabled = getMatrixValue(catId, regId);
                           return (
                             <td key={regId} className="text-center px-3 py-2">
                               <button
                                 onClick={() => handleToggleMatrix(catId, regId)}
-                                disabled={saving}
                                 className={`w-6 h-6 rounded border-2 transition ${
                                   enabled
                                     ? "bg-green-500 border-green-500 text-white"

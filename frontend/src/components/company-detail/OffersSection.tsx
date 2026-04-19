@@ -163,9 +163,21 @@ export function OffersSection({
         <h2 className="font-semibold text-gray-700">{"Офферы"}</h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400">{total + " всего"}</span>
+          {hasActiveTasks && (
+            <button
+              onClick={async () => {
+                if (!confirm("Остановить все активные задачи?")) return;
+                await api.post(`/companies/${companyId}/scrape-tasks/cancel-all`, {});
+                loadTasks();
+              }}
+              className="text-xs px-3 py-1 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100"
+            >
+              {"\u25A0 Остановить всё"}
+            </button>
+          )}
           <button
             onClick={handleStart}
-            disabled={starting || hasActiveTasks}
+            disabled={starting}
             className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
           >
             {starting ? "..." : (<><span>{"\u25B6"}</span>{"Начать парсинг"}</>)}
