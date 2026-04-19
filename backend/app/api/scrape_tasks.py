@@ -44,13 +44,47 @@ async def start_scrape_tasks(
     _: User = Depends(require_editor),
 ):
     """Create tasks from enabled matrix cells and queue them in Celery."""
-    from app.models.company_mapping import CompanyCategoryMapping
+    from app.models.company_mapping import CompanyCategoryMapping, CompanyRegionMapping
 
     company = await db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # All enabled matrix cells
+    # Valid category_ids and region_ids — those that have a mapping (visible in UI)
+    valid_cat_res = await db.execute(
+        select(CompanyCategoryMapping.category_id).where(
+            CompanyCategoryMapping.company_id == company_id,
+            CompanyCategoryMapping.category_id.is_not(None),
+        )
+    )
+    valid_cat_ids = {row[0] for row in valid_cat_res.all()}
+
+    valid_reg_res = await db.execute(
+        select(CompanyRegionMapping.region_id).where(
+            CompanyRegionMapping.company_id == company_id,
+        )
+    )
+    valid_reg_ids = {row[0] for row in valid_reg_res.all()}
+
+    # Clean up stale matrix rows (not in current mappings)
+    all_cells_res = await db.execute(
+        select(CompanyScrapeMatrix).where(CompanyScrapeMatrix.company_id == company_id)
+    )
+    all_cells = all_cells_res.scalars().all()
+    stale_count = 0
+    for c in all_cells:
+        is_stale = False
+        if c.category_id is not None and c.category_id not in valid_cat_ids:
+            is_stale = True
+        if c.region_id not in valid_reg_ids:
+            is_stale = True
+        if is_stale:
+            await db.delete(c)
+            stale_count += 1
+    if stale_count:
+        await db.commit()
+
+    # Now fetch active enabled cells (only valid ones remain)
     result = await db.execute(
         select(CompanyScrapeMatrix).where(
             CompanyScrapeMatrix.company_id == company_id,

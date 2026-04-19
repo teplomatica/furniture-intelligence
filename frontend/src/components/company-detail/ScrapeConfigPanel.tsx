@@ -125,7 +125,11 @@ export function ScrapeConfigPanel({
     api.patch(`/companies/${companyId}/scrape-matrix`, { items }).catch(() => onReload());
   };
 
-  const totalEnabled = matrix.filter((m) => m.enabled).length;
+  // Count only visible enabled cells (matrixCats × matrixRegs), respecting local overrides
+  const totalEnabled = matrixCats.reduce((acc, catId) =>
+    acc + matrixRegs.filter((regId) => getMatrixValue(catId, regId)).length, 0
+  );
+  const totalVisibleCells = matrixCats.length * matrixRegs.length;
 
   return (
     <section className="bg-white rounded-lg border mb-4">
@@ -294,7 +298,7 @@ export function ScrapeConfigPanel({
                   className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100">
                   Снять все
                 </button>
-                <span className="text-xs text-gray-400 ml-2">{totalEnabled} из {matrixCats.length * matrixRegs.length} активно</span>
+                <span className="text-xs text-gray-400 ml-2">{totalEnabled} из {totalVisibleCells} активно</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="text-sm">
