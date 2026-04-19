@@ -69,6 +69,23 @@ async def apply_analysis(
     _: User = Depends(require_editor),
 ):
     """Apply analysis results: create category mappings, region mappings, and scrape matrix."""
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
+    try:
+        return await _apply_analysis_inner(company_id, body, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"apply_analysis failed for company {company_id}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)[:300]}")
+
+
+async def _apply_analysis_inner(
+    company_id: int,
+    body: ApplyAnalysisRequest,
+    db: AsyncSession,
+):
     company = await db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -111,15 +128,22 @@ async def apply_analysis(
             rc.url = url
         mapped_retailer_cat_ids.add(rc.id)
 
-        # Create mapping (retailer_category → our_category)
+        # Create or update mapping (retailer_category → our_category)
         our_cat_id = cat.our_category_id
-        existing_map = await db.execute(
+        # Look for any existing mapping: by retailer_category_id OR by URL (legacy)
+        existing_map_result = await db.execute(
             select(CompanyCategoryMapping).where(
                 CompanyCategoryMapping.company_id == company_id,
-                CompanyCategoryMapping.retailer_category_id == rc.id,
+                CompanyCategoryMapping.retailer_url == url,
             )
         )
-        if not existing_map.scalar_one_or_none():
+        existing_map = existing_map_result.scalars().first()
+        if existing_map:
+            existing_map.retailer_category_id = rc.id
+            existing_map.retailer_name = site_name
+            if our_cat_id:
+                existing_map.category_id = our_cat_id
+        else:
             db.add(CompanyCategoryMapping(
                 company_id=company_id,
                 category_id=our_cat_id,
@@ -171,7 +195,10 @@ async def apply_analysis(
                     CompanyScrapeMatrix.region_id == reg_id,
                 )
             )
-            if not existing.scalar_one_or_none():
+            cell = existing.scalar_one_or_none()
+            if cell:
+                cell.enabled = True
+            else:
                 db.add(CompanyScrapeMatrix(
                     company_id=company_id,
                     retailer_category_id=rc_id,

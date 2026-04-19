@@ -44,16 +44,17 @@ async def start_scrape_tasks(
     _: User = Depends(require_editor),
 ):
     """Create tasks from enabled matrix cells and queue them in Celery."""
+    from app.models.company_mapping import CompanyCategoryMapping
+
     company = await db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Enabled matrix cells with retailer_category_id set
+    # All enabled matrix cells
     result = await db.execute(
         select(CompanyScrapeMatrix).where(
             CompanyScrapeMatrix.company_id == company_id,
             CompanyScrapeMatrix.enabled == True,
-            CompanyScrapeMatrix.retailer_category_id.is_not(None),
         )
     )
     cells = result.scalars().all()
@@ -61,10 +62,52 @@ async def start_scrape_tasks(
     if not cells:
         raise HTTPException(status_code=400, detail="Нет активных ячеек в матрице парсинга")
 
+    # Backfill retailer_category_id for legacy cells using category mapping URLs
+    from app.models.retailer_category import RetailerCategory
+    backfilled = 0
+    for cell in cells:
+        if cell.retailer_category_id:
+            continue
+        if not cell.category_id:
+            continue
+        # Find mapping with URL for this company+our_category
+        map_res = await db.execute(
+            select(CompanyCategoryMapping).where(
+                CompanyCategoryMapping.company_id == company_id,
+                CompanyCategoryMapping.category_id == cell.category_id,
+            )
+        )
+        mapping = map_res.scalar_one_or_none()
+        if not mapping or not mapping.retailer_url:
+            continue
+        # Find or create retailer_category for this URL
+        name = mapping.retailer_name or mapping.retailer_url.rstrip("/").split("/")[-1] or "Без названия"
+        rc_res = await db.execute(
+            select(RetailerCategory).where(
+                RetailerCategory.company_id == company_id,
+                RetailerCategory.url == mapping.retailer_url,
+            )
+        )
+        rc = rc_res.scalar_one_or_none()
+        if not rc:
+            rc = RetailerCategory(company_id=company_id, name=name, url=mapping.retailer_url)
+            db.add(rc)
+            await db.flush()
+        cell.retailer_category_id = rc.id
+        if not mapping.retailer_category_id:
+            mapping.retailer_category_id = rc.id
+        backfilled += 1
+    if backfilled:
+        await db.commit()
+
     from app.services.celery_tasks import scrape_offers_task
 
     created = 0
+    skipped = 0
     for cell in cells:
+        if not cell.retailer_category_id:
+            skipped += 1
+            continue
         task = ScrapeTask(
             company_id=company_id,
             retailer_category_id=cell.retailer_category_id,
@@ -78,7 +121,13 @@ async def start_scrape_tasks(
         created += 1
 
     await db.commit()
-    return {"created": created}
+
+    if created == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не удалось создать задачи. Ячеек: {len(cells)}, пропущено: {skipped}. Убедитесь что для категорий указаны URL."
+        )
+    return {"created": created, "skipped": skipped, "backfilled": backfilled}
 
 
 @router.get("/companies/{company_id}/scrape-tasks", response_model=list[ScrapeTaskOut])
